@@ -4,6 +4,7 @@
   "private": true,
   "description": "Production-grade Spanish Language Learning Platform for Arabic Speakers",
   "scripts": {
+    "build": "npm run build --prefix apps/web",
     "dev:web": "npm run dev --prefix apps/web",
     "dev:api": "php services/api/artisan serve --port=8000",
     "build:web": "npm run build --prefix apps/web",
