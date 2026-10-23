@@ -83,6 +83,37 @@ class User extends Authenticatable
         return $this->hasMany(NotificationLog::class);
     }
 
+    public function subscriptions()
+    {
+        return $this->hasMany(Subscription::class);
+    }
+
+    public function subscription()
+    {
+        return $this->hasOne(Subscription::class)->latestOfMany();
+    }
+
+    public function hasActiveSubscription(): bool
+    {
+        $sub = $this->subscription;
+        return $sub && $sub->isActive();
+    }
+
+    public function isPro(): bool
+    {
+        $sub = $this->subscription;
+        return $sub && $sub->isPro();
+    }
+
+    public function subscriptionTier(): string
+    {
+        $sub = $this->subscription;
+        if (!$sub || !$sub->isActive() || !$sub->plan) {
+            return 'free';
+        }
+        return $sub->plan->slug;
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';

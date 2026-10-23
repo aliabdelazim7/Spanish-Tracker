@@ -11,7 +11,7 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        // 1. Seed Curriculum & Course
+        // 1. Seed Curriculum & Course & SaaS Plans
         $this->call([
             CourseSeeder::class,
             PlacementQuestionSeeder::class,
@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             StorySeeder::class,
             AchievementSeeder::class,
             LevelExamQuestionSeeder::class,
+            PlanSeeder::class,
         ]);
 
         // 2. Demo User for quick test and development

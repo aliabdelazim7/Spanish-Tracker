@@ -23,7 +23,8 @@ import {
   PenTool,
   AlertTriangle,
   Globe,
-  Bell
+  Bell,
+  Crown
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -59,6 +60,7 @@ export const Navbar: React.FC = () => {
     { to: '/review', label: 'مراجعة الكلمات (SRS)', icon: RotateCcw },
     { to: '/speak', label: 'استوديو التحدث الذكي', icon: Mic },
     { to: '/progress', label: 'الإحصائيات والأوسمة', icon: Award },
+    { to: '/pricing', label: 'باقات الاشتراك والترقية (Pro)', icon: Crown },
     { to: '/placement-test', label: 'اختبار تحديد المستوى', icon: TrendingUp },
     { to: '/settings/notifications', label: 'إعدادات الإشعارات والتذكير', icon: Bell },
     { to: '/profile', label: 'الإعدادات الشخصية', icon: Settings },
@@ -130,6 +132,13 @@ export const Navbar: React.FC = () => {
                 </Link>
                 <Link to="/speak" className="hover:text-[#1B4D3E] transition-colors">
                   محادثة AI
+                </Link>
+                <Link
+                  to="/pricing"
+                  className="px-3 py-1 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-black text-xs flex items-center gap-1 shadow-2xs transition-all"
+                >
+                  <Crown className="w-3.5 h-3.5 fill-stone-950" />
+                  <span>باقة Pro</span>
                 </Link>
               </div>
 

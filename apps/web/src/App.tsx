@@ -29,6 +29,7 @@ const JournalPage = lazy(() => import('./pages/JournalPage').then(m => ({ defaul
 const MyMistakesPage = lazy(() => import('./pages/MyMistakesPage').then(m => ({ default: m.MyMistakesPage })));
 const LevelExamPage = lazy(() => import('./pages/LevelExamPage').then(m => ({ default: m.LevelExamPage })));
 const NotificationSettingsPage = lazy(() => import('./pages/NotificationSettingsPage').then(m => ({ default: m.NotificationSettingsPage })));
+const PricingPage = lazy(() => import('./pages/PricingPage').then(m => ({ default: m.PricingPage })));
 
 import { MobileTabBar } from './components/MobileTabBar';
 import { ReloadPrompt } from './components/ReloadPrompt';
@@ -60,7 +61,8 @@ export const App: React.FC = () => {
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<LandingPage />} />
-            <Route path="/login" element={<LoginPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />

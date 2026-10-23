@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { tutorApi } from '../api/tutor';
 import { Navbar } from '../components/Navbar';
 import { Sidebar } from '../components/Sidebar';
@@ -23,7 +24,8 @@ import {
   ChevronRight,
   User,
   Bot,
-  Lightbulb
+  Lightbulb,
+  Crown
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -393,6 +395,25 @@ export const SpeakingTutorPage: React.FC = () => {
                     <p className="text-xs text-stone-600 leading-relaxed font-normal">
                       لا تكتفِ بحفظ القواعد مجردة؛ ضع نفسك في مواقف حقيقية في شوارع مدريد وإشبيلية! تحدث مع النادل، موظف المطار، وسائق التاكسي بالصوت أو النص، وتلقَّ توجيهاً فورياً لكل رد تقوله.
                     </p>
+                  </div>
+
+                  {/* Pro SaaS Promotion Banner */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-amber-500/10 border border-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-right">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-amber-400 text-stone-950 flex items-center justify-center shrink-0">
+                        <Crown className="w-5 h-5 fill-stone-950" />
+                      </div>
+                      <div className="space-y-0.5">
+                        <div className="text-xs font-black text-stone-900">ترقية Pro: محاكي مواقف غير محدود وتأهيل وظيفي</div>
+                        <div className="text-[11px] text-stone-500">افتح كافة سيناريوهات BPO والسياحة القادمة مع تقييم نطق قشتالي متقدم</div>
+                      </div>
+                    </div>
+                    <Link
+                      to="/pricing"
+                      className="px-4 py-2 rounded-xl bg-[#1B4D3E] hover:bg-[#153e32] text-white font-bold text-xs shrink-0 shadow-2xs transition-colors"
+                    >
+                      عرض باقات Pro
+                    </Link>
                   </div>
 
                   {isLoadingScenarios ? (

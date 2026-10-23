@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OnboardingController;
 use App\Http\Controllers\Api\PlacementTestController;
 use App\Http\Controllers\Api\StoryController;
+use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\VocabularyController;
 use Illuminate\Support\Facades\Route;
 
@@ -26,6 +27,7 @@ Route::prefix('v1')->group(function () {
 
     // Public Curriculum browsing
     Route::get('/levels', [CurriculumController::class, 'levels']);
+    Route::get('/subscription/plans', [SubscriptionController::class, 'plans']);
 
     // Public High-Fidelity Audio / Pronunciation Stream & Capabilities
     Route::get('/audio/tts', [AudioController::class, 'tts']);
@@ -125,6 +127,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/notifications/subscribe', [NotificationController::class, 'subscribe']);
         Route::post('/notifications/unsubscribe', [NotificationController::class, 'unsubscribe']);
         Route::post('/notifications/test', [NotificationController::class, 'sendTestNotification']);
+
+        // SaaS Subscriptions & Billing
+        Route::get('/subscription/my-subscription', [SubscriptionController::class, 'mySubscription']);
+        Route::post('/subscription/checkout', [SubscriptionController::class, 'checkout']);
+        Route::post('/subscription/cancel', [SubscriptionController::class, 'cancel']);
 
         // Admin Routes
         Route::prefix('admin')->middleware('admin')->group(function () {
