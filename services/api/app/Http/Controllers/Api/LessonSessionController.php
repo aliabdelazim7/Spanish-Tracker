@@ -26,7 +26,24 @@ class LessonSessionController extends Controller
     public function start(Request $request, int $lessonId): JsonResponse
     {
         $user = $request->user();
-        $lesson = Lesson::where('is_published', true)->findOrFail($lessonId);
+        $lesson = Lesson::where('is_published', true)->with('unit.level')->findOrFail($lessonId);
+
+        $ranks = ['A1' => 1, 'A2' => 2, 'B1' => 3, 'B2' => 4, 'C1' => 5, 'C2' => 6];
+        $profile = $user->profile;
+        if ($profile) {
+            $userMaxLevel = $profile->max_unlocked_level ?? ($profile->estimated_cefr_level ?? 'A1');
+            $userRank = $ranks[$userMaxLevel] ?? 1;
+            $levelCode = $lesson->unit?->level?->code ?? 'A1';
+            $levelRank = $ranks[$levelCode] ?? 1;
+            $completedLevels = $profile->completed_levels ?? [];
+
+            if ($levelRank > $userRank && !in_array($levelCode, $completedLevels)) {
+                return response()->json([
+                    'message' => "لا يمكنك بدء درس في مستوى مقفل ({$levelCode}).",
+                    'is_unlocked' => false,
+                ], 403);
+            }
+        }
 
         // Resume in-progress or create new attempt
         $attempt = LessonAttempt::firstOrCreate(

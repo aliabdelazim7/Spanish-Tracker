@@ -25,8 +25,10 @@ class LevelExamController extends Controller
         'C2' => 'MAESTRIA',
     ];
 
+    public const PASS_THRESHOLD_PERCENT = 80; // 80% passing threshold as required
+
     /**
-     * Get exam details and questions for a specific CEFR level.
+     * Get balanced exam questions for a specific CEFR level.
      */
     public function getExam(Request $request, string $levelCode): JsonResponse
     {
@@ -40,8 +42,9 @@ class LevelExamController extends Controller
         $userMaxLevel = $profile?->max_unlocked_level ?? ($profile?->estimated_cefr_level ?? 'A1');
         $userLevelRank = self::LEVEL_ORDER[$userMaxLevel] ?? 1;
         $targetLevelRank = self::LEVEL_ORDER[$levelCode] ?? 1;
+        $completedLevels = $profile?->completed_levels ?? [];
 
-        if ($targetLevelRank > $userLevelRank) {
+        if ($targetLevelRank > $userLevelRank && !in_array($levelCode, $completedLevels)) {
             return response()->json([
                 'message' => "هذا المستوى ({$levelCode}) مغلق حالياً. يجب اجتياز المستويات السابقة أولاً.",
                 'is_unlocked' => false,
@@ -59,23 +62,49 @@ class LevelExamController extends Controller
             ->distinct('lesson_id')
             ->count('lesson_id');
 
-        $questions = LevelExamQuestion::where('cefr_level', $levelCode)
-            ->orderBy('order_index')
-            ->get()
-            ->map(function ($q) {
-                return [
-                    'id' => $q->id,
-                    'skill_category' => $q->skill_category,
-                    'question_text' => $q->question_text,
-                    'prompt_ar' => $q->prompt_ar,
-                    'audio_url' => $q->audio_url,
-                    'options' => $q->options,
-                    'points' => $q->points,
-                    'order_index' => $q->order_index,
-                ];
-            });
+        // Balanced skill-based random sampling (2 per skill category)
+        $skills = ['vocabulary', 'grammar', 'verbs', 'listening', 'reading', 'practical'];
+        $sampledQuestions = collect();
 
-        $alreadyPassed = in_array($levelCode, $profile?->completed_levels ?? []);
+        foreach ($skills as $skill) {
+            $pool = LevelExamQuestion::where('cefr_level', $levelCode)
+                ->where('skill_category', $skill)
+                ->inRandomOrder()
+                ->take(2)
+                ->get();
+            $sampledQuestions = $sampledQuestions->merge($pool);
+        }
+
+        // If less than 12, fill up from remaining pool
+        if ($sampledQuestions->count() < 12) {
+            $existingIds = $sampledQuestions->pluck('id')->toArray();
+            $extra = LevelExamQuestion::where('cefr_level', $levelCode)
+                ->whereNotIn('id', $existingIds)
+                ->inRandomOrder()
+                ->take(12 - $sampledQuestions->count())
+                ->get();
+            $sampledQuestions = $sampledQuestions->merge($extra);
+        }
+
+        // Fallback to all if pool is smaller
+        if ($sampledQuestions->isEmpty()) {
+            $sampledQuestions = LevelExamQuestion::where('cefr_level', $levelCode)->get();
+        }
+
+        $formattedQuestions = $sampledQuestions->shuffle()->map(function ($q, $index) {
+            return [
+                'id' => $q->id,
+                'skill_category' => $q->skill_category,
+                'question_text' => $q->question_text,
+                'prompt_ar' => $q->prompt_ar,
+                'audio_url' => $q->audio_url,
+                'options' => $q->options,
+                'points' => $q->points,
+                'order_index' => $index + 1,
+            ];
+        });
+
+        $alreadyPassed = in_array($levelCode, $completedLevels);
 
         return response()->json([
             'level' => [
@@ -87,8 +116,8 @@ class LevelExamController extends Controller
             'completed_lessons' => $completedLessons,
             'completion_percent' => $totalLessons > 0 ? (int) round(($completedLessons / $totalLessons) * 100) : 100,
             'already_passed' => $alreadyPassed,
-            'questions' => $questions,
-            'pass_threshold_percent' => 70,
+            'questions' => $formattedQuestions,
+            'pass_threshold_percent' => self::PASS_THRESHOLD_PERCENT,
         ]);
     }
 
@@ -102,15 +131,19 @@ class LevelExamController extends Controller
         $profile = $user->profile;
 
         $request->validate([
-            'answers' => 'required|array',
+            'answers' => 'required|array|min:1',
             'answers.*.question_id' => 'required|integer',
             'answers.*.answer' => 'required|string',
         ]);
 
-        $questions = LevelExamQuestion::where('cefr_level', $levelCode)->get()->keyBy('id');
+        $submittedQuestionIds = collect($request->input('answers'))->pluck('question_id')->toArray();
+        $questions = LevelExamQuestion::where('cefr_level', $levelCode)
+            ->whereIn('id', $submittedQuestionIds)
+            ->get()
+            ->keyBy('id');
 
         if ($questions->isEmpty()) {
-            return response()->json(['message' => 'لا توجد أسئلة مخصصة لاختبار هذا المستوى حالياً.'], 404);
+            return response()->json(['message' => 'لا توجد أسئلة صالحة للتقييم في هذا الطلب.'], 404);
         }
 
         $totalEarned = 0;
@@ -142,6 +175,7 @@ class LevelExamController extends Controller
 
             $detailedResults[] = [
                 'question_id' => $qId,
+                'skill_category' => $skill,
                 'question_text' => $question->question_text,
                 'user_answer' => $userAns,
                 'correct_answer' => $question->correct_answer,
@@ -151,70 +185,84 @@ class LevelExamController extends Controller
         }
 
         $scorePercent = $totalPossible > 0 ? (int) round(($totalEarned / $totalPossible) * 100) : 0;
-        $passed = $scorePercent >= 70;
+        $passed = $scorePercent >= self::PASS_THRESHOLD_PERCENT;
         $nextLevel = self::NEXT_LEVEL[$levelCode] ?? 'MAESTRIA';
 
-        return DB::transaction(function () use ($user, $profile, $levelCode, $scorePercent, $passed, $nextLevel, $skillBreakdown, $detailedResults) {
+        // Calculate structured section performance with percentages
+        $sectionPerformance = [];
+        foreach ($skillBreakdown as $skill => $data) {
+            $sectionPerformance[$skill] = [
+                'earned' => $data['earned'],
+                'total' => $data['total'],
+                'percent' => $data['total'] > 0 ? (int) round(($data['earned'] / $data['total']) * 100) : 0,
+            ];
+        }
+
+        return DB::transaction(function () use ($user, $profile, $levelCode, $scorePercent, $passed, $nextLevel, $sectionPerformance, $detailedResults) {
             $xpAwarded = 0;
             $feedbackAr = '';
+            $completedLevels = $profile?->completed_levels ?? [];
+            $alreadyCompleted = in_array($levelCode, $completedLevels);
 
             if ($passed) {
-                $completedLevels = $profile?->completed_levels ?? [];
-                if (!in_array($levelCode, $completedLevels)) {
+                if (!$alreadyCompleted) {
                     $completedLevels[] = $levelCode;
+
+                    // Promote max unlocked level
+                    $currentMaxRank = self::LEVEL_ORDER[$profile?->max_unlocked_level ?? 'A1'] ?? 1;
+                    $nextRank = self::LEVEL_ORDER[$nextLevel] ?? $currentMaxRank;
+                    $newMaxLevel = $nextRank > $currentMaxRank ? $nextLevel : ($profile?->max_unlocked_level ?? $levelCode);
+
+                    if ($profile) {
+                        $profile->update([
+                            'completed_levels' => $completedLevels,
+                            'max_unlocked_level' => $newMaxLevel,
+                            'estimated_cefr_level' => $newMaxLevel,
+                        ]);
+                    }
+
+                    // Award Level Graduation XP (+100 XP) with idempotency protection
+                    $xpAwarded = 100;
+                    app(GamificationService::class)->awardXp(
+                        $user,
+                        $xpAwarded,
+                        'level_graduation',
+                        $profile->id ?? $user->id,
+                        "اجتياز اختبار المستوى {$levelCode} بنجاح بنسبة {$scorePercent}% والتأهل للمستوى {$nextLevel}"
+                    );
                 }
 
-                // Check if current unlocked level rank is less than next level rank
-                $currentMaxRank = self::LEVEL_ORDER[$profile?->max_unlocked_level ?? 'A1'] ?? 1;
-                $nextRank = self::LEVEL_ORDER[$nextLevel] ?? $currentMaxRank;
-
-                $newMaxLevel = $nextRank > $currentMaxRank ? $nextLevel : ($profile?->max_unlocked_level ?? $levelCode);
-
-                if ($profile) {
-                    $profile->update([
-                        'completed_levels' => $completedLevels,
-                        'max_unlocked_level' => $newMaxLevel,
-                        'estimated_cefr_level' => $newMaxLevel,
-                    ]);
-                }
-
-                // Award Level Graduation XP (+100 XP)
-                $xpAwarded = 100;
-                app(GamificationService::class)->awardXp(
-                    $user,
-                    $xpAwarded,
-                    'level_graduation',
-                    $profile->id ?? $user->id,
-                    "اجتياز اختبار المستوى {$levelCode} بنجاح والتأهل للمستوى {$nextLevel}"
-                );
-
-                $feedbackAr = "تهانينا الحارة! لقد حققت نسبة {$scorePercent}% واجتزت اختبار المستوى {$levelCode} بجدارة. تم رسمياً فتح المستوى التالي ({$nextLevel}) بكامل محتوياته!";
+                $feedbackAr = "تهانينا! لقد حققت نسبة {$scorePercent}% (الحد الأدنى المطلوب 80%) واجتزت اختبار المستوى {$levelCode}. تم فتح المستوى التالي ({$nextLevel}) بنجاح.";
             } else {
-                $feedbackAr = "لقد حصلت على {$scorePercent}%. نسبة الاجتياز المطلوبة هي 70%. راجع الملاحظات والدروس أدناه، ثم أعد الاختبار لفتح المستوى التالي!";
+                $feedbackAr = "لقد حصلت على {$scorePercent}%. الحد الأدنى المطلوب لاجتياز المستوى هو 80%. راجع تقرير المهارات والملاحظات أدناه ثم أعد المحاولة.";
             }
 
+            // Persist full assessment attempt history
             $attempt = LevelExamAttempt::create([
                 'user_id' => $user->id,
                 'cefr_level' => $levelCode,
                 'score_percent' => $scorePercent,
                 'passed' => $passed,
-                'skill_breakdown' => $skillBreakdown,
+                'skill_breakdown' => $sectionPerformance,
                 'feedback_ar' => $feedbackAr,
                 'xp_awarded' => $xpAwarded,
                 'completed_at' => now(),
             ]);
 
             return response()->json([
+                'attempt_id' => $attempt->id,
                 'passed' => $passed,
                 'score_percent' => $scorePercent,
+                'pass_threshold_percent' => self::PASS_THRESHOLD_PERCENT,
                 'current_level' => $levelCode,
                 'next_level' => $passed ? $nextLevel : null,
                 'feedback_ar' => $feedbackAr,
                 'xp_awarded' => $xpAwarded,
-                'skill_breakdown' => $skillBreakdown,
+                'section_performance' => $sectionPerformance,
                 'detailed_results' => $detailedResults,
-                'unlocked_levels' => $profile?->completed_levels ?? [],
+                'unlocked_levels' => $completedLevels,
                 'max_unlocked_level' => $profile?->max_unlocked_level ?? $levelCode,
+                'academic_disclaimer_ar' => 'هذا التقييم مصمم لمتابعة التقدم الأكاديمي الداخلي بالمنصة، ولا يحل محل شهادات DELE / SIELE الرسمية لـ CEFR.',
             ]);
         });
     }

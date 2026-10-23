@@ -139,12 +139,18 @@ export const LevelExamPage: React.FC = () => {
           </h2>
 
           <div className="inline-block px-4 py-1.5 rounded-full bg-white shadow-sm border text-lg font-bold">
-            النتيجة: {examResult.score_percent}% (المطلوب 70%)
+            النتيجة: {examResult.score_percent}% (نسبة الاجتياز المطلوبة: {examResult.pass_threshold_percent || 80}%)
           </div>
 
           <p className="text-gray-700 leading-relaxed max-w-lg mx-auto">
             {examResult.feedback_ar}
           </p>
+
+          {examResult.academic_disclaimer_ar && (
+            <p className="text-xs text-stone-500 max-w-md mx-auto italic">
+              {examResult.academic_disclaimer_ar}
+            </p>
+          )}
 
           {passed && examResult.next_level && (
             <div className="p-4 bg-white/80 backdrop-blur rounded-2xl border border-emerald-300 max-w-md mx-auto text-emerald-900 flex items-center justify-center gap-3">
@@ -187,6 +193,27 @@ export const LevelExamPage: React.FC = () => {
             )}
           </div>
         </div>
+
+        {/* Section Level Performance */}
+        {examResult.section_performance && (
+          <div className="bg-white rounded-2xl border p-6 space-y-3 shadow-sm">
+            <h4 className="text-base font-bold text-gray-900 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-amber-500" />
+              <span>نتائج أقسام ومهارات الاختبار (Section Breakdown):</span>
+            </h4>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {Object.entries(examResult.section_performance).map(([skill, stat]: [string, any]) => (
+                <div key={skill} className="p-3 bg-stone-50 rounded-xl border border-stone-200 text-center space-y-1">
+                  <span className="text-xs font-semibold text-stone-500 uppercase">{skill}</span>
+                  <div className="text-lg font-black text-stone-900">{stat.percent}%</div>
+                  <div className="text-[10px] text-stone-400">
+                    {stat.earned} / {stat.total} نقطة
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Detailed Breakdown */}
         {examResult.detailed_results && (

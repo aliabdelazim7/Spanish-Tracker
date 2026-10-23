@@ -105,6 +105,21 @@ class CurriculumController extends Controller
             }])
             ->findOrFail($unitId);
 
+        $ranks = ['A1' => 1, 'A2' => 2, 'B1' => 3, 'B2' => 4, 'C1' => 5, 'C2' => 6];
+        $profile = $user->profile;
+        $userMaxLevel = $profile?->max_unlocked_level ?? ($profile?->estimated_cefr_level ?? 'A1');
+        $userRank = $ranks[$userMaxLevel] ?? 1;
+        $unitLevelCode = $unit->level?->code ?? 'A1';
+        $unitLevelRank = $ranks[$unitLevelCode] ?? 1;
+        $completedLevels = $profile?->completed_levels ?? [];
+
+        if ($unitLevelRank > $userRank && !in_array($unitLevelCode, $completedLevels)) {
+            return response()->json([
+                'message' => "الوحدة تابعة لمستوى مقفل ({$unitLevelCode}). يجب اجتياز المستويات السابقة أولاً.",
+                'is_unlocked' => false,
+            ], 403);
+        }
+
         $completedLessonIds = LessonAttempt::where('user_id', $user->id)
             ->where('status', 'completed')
             ->pluck('lesson_id')
@@ -118,6 +133,8 @@ class CurriculumController extends Controller
 
     public function lesson(Request $request, int $lessonId): JsonResponse
     {
+        $user = $request->user();
+
         $lesson = Lesson::where('is_published', true)
             ->with(['unit.level', 'exercises' => function ($q) {
                 // Return exercises structure for presentation
@@ -127,6 +144,23 @@ class CurriculumController extends Controller
                 ])->orderBy('order_index');
             }])
             ->findOrFail($lessonId);
+
+        $ranks = ['A1' => 1, 'A2' => 2, 'B1' => 3, 'B2' => 4, 'C1' => 5, 'C2' => 6];
+        $profile = $user?->profile;
+        if ($profile) {
+            $userMaxLevel = $profile->max_unlocked_level ?? ($profile->estimated_cefr_level ?? 'A1');
+            $userRank = $ranks[$userMaxLevel] ?? 1;
+            $lessonLevelCode = $lesson->unit?->level?->code ?? 'A1';
+            $lessonLevelRank = $ranks[$lessonLevelCode] ?? 1;
+            $completedLevels = $profile->completed_levels ?? [];
+
+            if ($lessonLevelRank > $userRank && !in_array($lessonLevelCode, $completedLevels)) {
+                return response()->json([
+                    'message' => "الدرس تابع لمستوى مقفل ({$lessonLevelCode}). يجب اجتياز المستويات السابقة أولاً.",
+                    'is_unlocked' => false,
+                ], 403);
+            }
+        }
 
         return response()->json([
             'lesson' => $lesson,
