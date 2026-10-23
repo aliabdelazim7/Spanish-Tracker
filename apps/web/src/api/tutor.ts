@@ -43,18 +43,48 @@ export const tutorApi = {
       body: JSON.stringify({ topic, level }),
     }),
 
-  speakingFeedback: (transcript: string, targetPhrase: string) =>
+  speakingFeedback: (transcript: string, targetPhrase: string, lang = 'ar') =>
     apiClient<{
       result: {
         transcript: string;
         target_phrase: string;
         similarity_score: number;
         passed: boolean;
-        feedback_ar: string;
+        feedback: string;
+        words_analysis: { word: string; status: 'correct' | 'missed' }[];
         provider: string;
       };
     }>('/tutor/speaking-feedback', {
       method: 'POST',
-      body: JSON.stringify({ transcript, target_phrase: targetPhrase }),
+      body: JSON.stringify({ transcript, target_phrase: targetPhrase, lang }),
+    }),
+
+  hint: (questionOrConcept: string, hintStage = 1, lang = 'ar') =>
+    apiClient<{
+      result: {
+        question_or_concept: string;
+        hint_stage: number;
+        hint: string;
+        provider: string;
+      };
+    }>('/tutor/hint', {
+      method: 'POST',
+      body: JSON.stringify({ question_or_concept: questionOrConcept, hint_stage: hintStage, lang }),
+    }),
+
+  evaluateExercise: (question: string, userAnswer: string, correctAnswer: string, lang = 'ar') =>
+    apiClient<{
+      result: {
+        question: string;
+        user_answer: string;
+        correct_answer: string;
+        is_correct: boolean;
+        why_incorrect: string | null;
+        guidance: string;
+        provider: string;
+      };
+    }>('/tutor/evaluate-exercise', {
+      method: 'POST',
+      body: JSON.stringify({ question, user_answer: userAnswer, correct_answer: correctAnswer, lang }),
     }),
 };

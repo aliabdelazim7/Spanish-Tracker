@@ -6,74 +6,70 @@ $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
 
 use App\Models\VocabularyItem;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 
-$levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-$columns = Schema::getColumnListing('vocabulary_items');
-$hasEnTranslation = in_array('english_meaning', $columns);
-$hasEnExample = in_array('example_sentence_en', $columns);
+echo "=== VOCABULARY AUDIT REPORT BY CEFR LEVEL ===" . PHP_EOL . PHP_EOL;
 
-$results = [];
+$levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
 
 foreach ($levels as $level) {
-    $items = VocabularyItem::where('cefr_level', $level)->get();
-    $total = $items->count();
+    $total = VocabularyItem::where('cefr_level', $level)->count();
+    
+    // Normalized unique entries (lowercase, trimmed)
+    $uniqueCount = VocabularyItem::where('cefr_level', $level)
+        ->select(DB::raw('LOWER(TRIM(spanish_word)) as norm_word'))
+        ->distinct()
+        ->count();
 
-    // Normalization: trim, lowercase, remove punctuation ¿ ¡ ! ? . ,
-    $uniqueNormalized = $items->map(function ($item) {
-        $clean = mb_strtolower(trim($item->spanish_word));
-        $clean = preg_replace('/[¿¡!?,.]/u', '', $clean);
-        return trim($clean);
-    })->unique()->count();
+    $verbs = VocabularyItem::where('cefr_level', $level)
+        ->where('part_of_speech', 'verb')
+        ->count();
 
-    $verbs = $items->where('part_of_speech', 'verb')->count();
+    $phrases = VocabularyItem::where('cefr_level', $level)
+        ->whereIn('part_of_speech', ['phrase', 'expression'])
+        ->count();
 
-    $practicalExpressionsAndSentences = $items->filter(function ($item) {
-        return in_array($item->part_of_speech, ['sentence', 'phrase', 'expression']) 
-            || $item->topic === 'essential_sentences' 
-            || str_contains($item->spanish_word, ' ');
-    })->count();
+    $withAr = VocabularyItem::where('cefr_level', $level)
+        ->whereNotNull('arabic_meaning')
+        ->where('arabic_meaning', '!=', '')
+        ->count();
 
-    $arabicTranslations = $items->filter(function ($item) {
-        return !empty(trim($item->arabic_meaning ?? ''));
-    })->count();
+    $withEn = VocabularyItem::where('cefr_level', $level)
+        ->whereNotNull('english_meaning')
+        ->where('english_meaning', '!=', '')
+        ->count();
 
-    $englishTranslations = $hasEnTranslation 
-        ? $items->filter(function ($item) { return !empty(trim($item->english_meaning ?? '')); })->count() 
-        : 0;
+    $withEsEx = VocabularyItem::where('cefr_level', $level)
+        ->whereNotNull('example_sentence_es')
+        ->where('example_sentence_es', '!=', '')
+        ->count();
 
-    $spanishExamples = $items->filter(function ($item) {
-        return !empty(trim($item->example_sentence_es ?? ''));
-    })->count();
+    $withArEx = VocabularyItem::where('cefr_level', $level)
+        ->whereNotNull('example_sentence_ar')
+        ->where('example_sentence_ar', '!=', '')
+        ->count();
 
-    $arabicExamples = $items->filter(function ($item) {
-        return !empty(trim($item->example_sentence_ar ?? ''));
-    })->count();
+    $withEnEx = VocabularyItem::where('cefr_level', $level)
+        ->whereNotNull('example_sentence_en')
+        ->where('example_sentence_en', '!=', '')
+        ->count();
 
-    $englishExamples = $hasEnExample 
-        ? $items->filter(function ($item) { return !empty(trim($item->example_sentence_en ?? '')); })->count() 
-        : 0;
+    $withAudio = VocabularyItem::where('cefr_level', $level)
+        ->where(function ($q) {
+            $q->whereNotNull('audio_url')->where('audio_url', '!=', '');
+        })
+        ->count();
 
-    // Working audio references: check if audio_url is present or if system uses TTS route / browser synthesis
-    $audioRefs = $items->filter(function ($item) {
-        return !empty(trim($item->audio_url ?? ''));
-    })->count();
-
-    $results[$level] = [
-        'total' => $total,
-        'unique_normalized' => $uniqueNormalized,
-        'verbs' => $verbs,
-        'practical_expressions_and_sentences' => $practicalExpressionsAndSentences,
-        'arabic_translations' => $arabicTranslations,
-        'english_translations' => $englishTranslations,
-        'has_english_column' => $hasEnTranslation,
-        'spanish_examples' => $spanishExamples,
-        'arabic_examples' => $arabicExamples,
-        'english_examples' => $englishExamples,
-        'has_english_example_column' => $hasEnExample,
-        'audio_url_records' => $audioRefs,
-    ];
+    echo "[$level]:" . PHP_EOL;
+    echo "  - Total records: $total" . PHP_EOL;
+    echo "  - Unique normalized entries: $uniqueCount" . PHP_EOL;
+    echo "  - Verbs: $verbs" . PHP_EOL;
+    echo "  - Practical expressions / phrases: $phrases" . PHP_EOL;
+    echo "  - With Arabic translations: $withAr" . PHP_EOL;
+    echo "  - With English translations: $withEn" . PHP_EOL;
+    echo "  - With Spanish example sentences: $withEsEx" . PHP_EOL;
+    echo "  - With Arabic example translations: $withArEx" . PHP_EOL;
+    echo "  - With English example translations: $withEnEx" . PHP_EOL;
+    echo "  - With dedicated audio references: $withAudio (All synthesize via Web Speech API)" . PHP_EOL;
+    echo PHP_EOL;
 }
-
-echo json_encode($results, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);

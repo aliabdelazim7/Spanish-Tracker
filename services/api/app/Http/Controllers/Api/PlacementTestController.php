@@ -23,12 +23,22 @@ class PlacementTestController extends Controller
     {
         $user = $request->user();
         $attempt = $this->placementService->startAttempt($user);
+        $questionIds = $attempt->question_ids ?? [];
 
-        // Fetch active questions but hide correct_answer and explanation to prevent cheating
-        $questions = PlacementQuestion::where('is_active', true)
-            ->select(['id', 'skill_category', 'difficulty_level', 'question_type', 'question_text', 'context_text', 'prompt_ar', 'audio_url', 'options', 'points'])
-            ->orderBy('id')
-            ->get();
+        // Fetch active questions preserving progressive difficulty order without exposing answers
+        $query = PlacementQuestion::where('is_active', true)
+            ->select(['id', 'skill_category', 'difficulty_level', 'question_type', 'question_text', 'context_text', 'prompt_ar', 'audio_url', 'options', 'points']);
+
+        if (!empty($questionIds)) {
+            $questions = $query->whereIn('id', $questionIds)
+                ->get()
+                ->sortBy(function ($q) use ($questionIds) {
+                    return array_search($q->id, $questionIds);
+                })
+                ->values();
+        } else {
+            $questions = $query->orderBy('id')->get();
+        }
 
         $answeredQuestionIds = $attempt->answers()->pluck('placement_question_id')->toArray();
 

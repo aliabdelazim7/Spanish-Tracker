@@ -20,12 +20,15 @@ class WritingAnalysis extends Model
         'fluency_score',
         'total_errors',
         'total_suggestions',
+        'is_ai_generated',
+        'provider',
     ];
 
     protected $casts = [
         'fluency_score' => 'integer',
         'total_errors' => 'integer',
         'total_suggestions' => 'integer',
+        'is_ai_generated' => 'boolean',
     ];
 
     public function journalEntry(): BelongsTo

@@ -9,10 +9,12 @@ class PlacementAttempt extends Model
     protected $fillable = [
         'user_id',
         'status',
+        'question_ids',
         'total_score',
         'estimated_level',
         'skill_breakdown',
         'summary_report_ar',
+        'academic_disclaimer_ar',
         'recommended_unit_id',
         'started_at',
         'completed_at',
@@ -20,6 +22,7 @@ class PlacementAttempt extends Model
 
     protected $casts = [
         'total_score' => 'integer',
+        'question_ids' => 'array',
         'skill_breakdown' => 'array',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',

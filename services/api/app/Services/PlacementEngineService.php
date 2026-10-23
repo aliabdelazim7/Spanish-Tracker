@@ -12,6 +12,36 @@ use Illuminate\Support\Facades\DB;
 class PlacementEngineService
 {
     /**
+     * Generate progressive questions ordered by difficulty level (A1 -> A2 -> B1 -> B2).
+     */
+    public function generateProgressiveQuestions(): array
+    {
+        $levels = ['A1', 'A2', 'B1', 'B2'];
+        $sampledIds = [];
+
+        foreach ($levels as $lvl) {
+            $ids = PlacementQuestion::where('is_active', true)
+                ->where('difficulty_level', $lvl)
+                ->inRandomOrder()
+                ->take(3)
+                ->pluck('id')
+                ->toArray();
+            $sampledIds = array_merge($sampledIds, $ids);
+        }
+
+        if (count($sampledIds) < 12) {
+            $extra = PlacementQuestion::where('is_active', true)
+                ->whereNotIn('id', $sampledIds)
+                ->take(12 - count($sampledIds))
+                ->pluck('id')
+                ->toArray();
+            $sampledIds = array_merge($sampledIds, $extra);
+        }
+
+        return $sampledIds;
+    }
+
+    /**
      * Start or resume an active placement test.
      */
     public function startAttempt(User $user): PlacementAttempt
@@ -22,12 +52,16 @@ class PlacementEngineService
             ->first();
 
         if ($existing) {
+            if (empty($existing->question_ids)) {
+                $existing->update(['question_ids' => $this->generateProgressiveQuestions()]);
+            }
             return $existing;
         }
 
         return PlacementAttempt::create([
             'user_id' => $user->id,
             'status' => 'in_progress',
+            'question_ids' => $this->generateProgressiveQuestions(),
             'started_at' => now(),
         ]);
     }
@@ -115,27 +149,28 @@ class PlacementEngineService
             // Find default starting unit (Unit 1)
             $firstUnit = Unit::orderBy('order_index')->first();
 
+            // Find first unit belonging to the estimated CEFR level
+            $recommendedUnit = Unit::whereHas('level', function ($q) use ($level) {
+                $q->where('code', $level);
+            })->orderBy('order_index')->first() ?? $firstUnit;
+            $recommendedUnitId = $recommendedUnit?->id;
+
             if ($percentage < 35) {
                 $level = 'A1';
-                $recommendedUnitId = $firstUnit?->id;
                 $reportAr = 'مستواك الحالي هو مبتدئ (A1). ننصحك بالبدء من الوحدة الأولى لتعلم أساسيات النطق، التحيات، وبناء الجمل الإسبانية بطريقة متينة.';
             } elseif ($percentage < 65) {
                 $level = 'A2';
-                // Find unit 2 or 3
-                $a2Unit = Unit::where('order_index', '>=', 2)->orderBy('order_index')->first() ?? $firstUnit;
-                $recommendedUnitId = $a2Unit?->id;
-                $reportAr = 'مستواك الحالي هو أساسي متقدم (A2). لديك معرفة جيدة بالقواعد الأساسية والمفردات اليومية، وتستطيع التخطي إلى وحدات التواصل المتقدم والمحادثة اليومية.';
+                $reportAr = 'مستواك الحالي هو أساسي متقدم (A2). لديك معرفة جيدة بالقواعد الأساسية والمفردات اليومية، وتستطيع البدء مباشرة من محتوى المستوى A2 دون الحاجة لإعادة A1.';
             } elseif ($percentage < 85) {
                 $level = 'B1';
-                $b1Unit = Unit::orderBy('order_index', 'desc')->first() ?? $firstUnit;
-                $recommendedUnitId = $b1Unit?->id;
-                $reportAr = 'مستواك الحالي متوسط (B1). أظهرت قدرة عالية على فهم التراكيب المعقدة وتصريف الأفعال الشائعة. أنت جاهز لمحتوى متقدم والقصص التفاعلية.';
+                $reportAr = 'مستواك الحالي متوسط (B1). أظهرت قدرة عالية على فهم التراكيب المعقدة وتصريف الأفعال الشائعة. أنت مؤهل مباشرة لمحتوى المستوى B1 والقصص التفاعلية.';
             } else {
                 $level = 'B2';
-                $b2Unit = Unit::orderBy('order_index', 'desc')->first() ?? $firstUnit;
-                $recommendedUnitId = $b2Unit?->id;
-                $reportAr = 'أداء ممتاز! مستواك يقارب فوق المتوسط (B2). لديك حصيلة لغوية قوية وإلمام بالقواعد الدقيقة.';
+                $reportAr = 'أداء ممتاز! مستواك يقارب فوق المتوسط (B2). لديك حصيلة لغوية قوية وإلمام بالقواعد الدقيقة وتم فتح المستويات حتى B2 تلقائياً.';
             }
+
+            // Academic limitation notice
+            $disclaimerAr = 'ملاحظة الموثوقية الأكاديمية: يقدم هذا الاختبار تقييماً تشخيصياً دقيقاً للمستويات التأسيسية من A1 إلى B2 بناءً على المفردات، القواعد، الاستماع، وفهم المقروء. ولا يحل التقييم الآلي متعدد الخيارات محل الاختبارات الشفوية والمقالية الموسعة (مثل DELE / SIELE) اللازمة لقياس مستويات الإتقان التام C1 و C2.';
 
             // Skill breakdown formatting
             $skillBreakdown = [];
@@ -156,11 +191,12 @@ class PlacementEngineService
                 'estimated_level' => $level,
                 'skill_breakdown' => $skillBreakdown,
                 'summary_report_ar' => $reportAr,
+                'academic_disclaimer_ar' => $disclaimerAr,
                 'recommended_unit_id' => $recommendedUnitId,
                 'completed_at' => now(),
             ]);
 
-            // Update user profile
+            // Update user profile with progression unlock
             $user = $attempt->user;
             if ($user && $user->profile) {
                 $ranks = ['A1' => 1, 'A2' => 2, 'B1' => 3, 'B2' => 4, 'C1' => 5, 'C2' => 6];
@@ -179,14 +215,22 @@ class PlacementEngineService
                 ]);
             }
 
-            // Award placement test completion XP
-            app(GamificationService::class)->awardXp(
-                $user,
-                50,
-                'placement',
-                $attempt->id,
-                'إكمال اختبار تحديد المستوى'
-            );
+            // Award placement test completion XP (protected from duplicate awards)
+            $existingXp = DB::table('xp_transactions')
+                ->where('user_id', $user->id)
+                ->where('source_type', 'placement')
+                ->where('source_id', $attempt->id)
+                ->exists();
+
+            if (!$existingXp) {
+                app(GamificationService::class)->awardXp(
+                    $user,
+                    50,
+                    'placement',
+                    $attempt->id,
+                    'إكمال اختبار تحديد المستوى'
+                );
+            }
 
             return $attempt->fresh(['recommendedUnit']);
         });

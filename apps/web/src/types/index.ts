@@ -70,6 +70,7 @@ export interface Lesson {
   title: string;
   title_ar: string;
   objective_ar: string;
+  objective_en?: string;
   grammar_notes_ar: string | null;
   estimated_minutes: number;
   xp_reward: number;
@@ -230,6 +231,8 @@ export interface WritingAnalysis {
   fluency_score: number;
   total_errors: number;
   total_suggestions: number;
+  is_ai_generated?: boolean;
+  provider?: string;
   created_at: string;
   suggestions?: WritingSuggestion[];
 }
@@ -239,12 +242,47 @@ export interface WritingSuggestion {
   writing_analysis_id: number;
   original_text: string;
   suggested_text: string;
-  error_category: 'grammar' | 'verb_conjugation' | 'gender_agreement' | 'vocabulary' | 'spelling' | 'naturalness';
+  error_category: 'grammar' | 'verb_conjugation' | 'gender_agreement' | 'vocabulary' | 'spelling' | 'naturalness' | 'unnatural_phrasing' | 'sentence_structure';
   severity: 'error' | 'suggestion';
   explanation_ar: string;
   explanation_en: string | null;
   example_sentence_es: string | null;
   related_concept_slug: string | null;
+  natural_alternative?: string | null;
+  is_understood?: boolean;
+  status?: 'pending' | 'understood' | 'review_later';
+  user_notes?: string | null;
+}
+
+export interface JournalPrompt {
+  id: string;
+  level: string;
+  mode: 'guided' | 'free';
+  title_es: string;
+  title_ar: string;
+  title_en: string;
+  description_es: string;
+  description_ar: string;
+  description_en: string;
+  starter_phrases: string[];
+  suggested_vocabulary: { word: string; translation_ar: string; translation_en: string }[];
+  target_grammar: string;
+  target_word_count: number;
+  is_daily_challenge?: boolean;
+}
+
+export interface FollowUpExercise {
+  concept_slug: string;
+  type: 'fill_blank' | 'error_correction';
+  prompt_es: string;
+  prompt_ar: string;
+  prompt_en: string;
+  sentence: string;
+  options: string[];
+  correct_answer: string;
+  explanation_ar: string;
+  explanation_en: string;
+  source_mistake?: string;
 }
 
 export interface LearnerErrorConcept {

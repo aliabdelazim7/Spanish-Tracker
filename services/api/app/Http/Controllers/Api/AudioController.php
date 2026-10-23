@@ -3,23 +3,50 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Illuminate\Support\Facades\Log;
 
 class AudioController extends Controller
 {
+    /**
+     * Get audio engine capabilities, preferred European Spanish variety, and provider metadata.
+     */
+    public function capabilities(): JsonResponse
+    {
+        return response()->json([
+            'preferred_variety' => 'es-ES',
+            'preferred_variety_label' => 'Español Europeo / Castellano',
+            'primary_provider' => 'google_tts_cached',
+            'fallback_provider' => 'browser_speech_synthesis',
+            'cache_enabled' => true,
+            'max_text_length' => 400,
+            'disclaimer_en' => 'Browser speech synthesis uses the device operating system voice pack. Requesting es-ES does not guarantee a Castilian accent if your operating system lacks a Spain voice pack.',
+            'disclaimer_ar' => 'نطق المتصفح يعتمد على حزم الأصوات المثبتة بنظام تشغيل جهازك. اختيار es-ES يحاول تفعيل النطق القشتالي ولكنه قد يرجع لصوت إسباني بديل إذا لم تتوفر حزمة إسبانيا على جهازك.',
+            'phonetic_accuracy_notice_en' => 'Speech evaluation uses lexical transcription matching. It provides guided practice and should not be mistaken for laboratory acoustic phonetic analysis.',
+            'phonetic_accuracy_notice_ar' => 'تقييم النطق يعتمد على مطابقة الكلمات المنطوقة مع النص المستهدف، وهو أداة إرشادية وتدريبية ولا يمثل تحليلاً صوتياً معملياً لمخارج الحروف.',
+        ]);
+    }
+
     /**
      * Stream or cache high-fidelity native Spanish educational audio.
      */
     public function tts(Request $request)
     {
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'text' => 'required|string|min:1',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Text parameter is required',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
         $text = trim((string) $request->query('text', ''));
         $lang = (string) $request->query('lang', 'es');
-
-        if (empty($text)) {
-            return response()->json(['message' => 'Text parameter is required'], 422);
-        }
 
         // Limit length to avoid abuse
         if (mb_strlen($text) > 400) {
@@ -48,6 +75,8 @@ class AudioController extends Controller
                 'Content-Type' => 'audio/mpeg',
                 'Cache-Control' => 'public, max-age=2592000, immutable',
                 'Access-Control-Allow-Origin' => '*',
+                'X-Audio-Source' => 'local_disk_cache',
+                'X-Audio-Variety' => $lang === 'es' ? 'es-ES' : $lang,
             ]);
         }
 
@@ -67,15 +96,18 @@ class AudioController extends Controller
                     'Content-Type' => 'audio/mpeg',
                     'Cache-Control' => 'public, max-age=2592000, immutable',
                     'Access-Control-Allow-Origin' => '*',
+                    'X-Audio-Source' => 'upstream_tts_provider',
+                    'X-Audio-Variety' => $lang === 'es' ? 'es-ES' : $lang,
                 ]);
             }
         } catch (\Throwable $e) {
-            // Log fallback indicator
+            Log::warning('Upstream TTS fetch failed: ' . $e->getMessage());
         }
 
         return response()->json([
-            'message' => 'Audio synthesis unavailable',
-            'fallback_to_browser' => true
+            'message' => 'Audio synthesis upstream unavailable, fallback to browser speech synthesis',
+            'fallback_to_browser' => true,
+            'variety' => 'es-ES',
         ], 503);
     }
 }

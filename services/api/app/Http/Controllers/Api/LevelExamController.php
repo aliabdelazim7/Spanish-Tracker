@@ -184,21 +184,53 @@ class LevelExamController extends Controller
             ];
         }
 
+        $passThreshold = (int) config('learning.exam_pass_threshold', self::PASS_THRESHOLD_PERCENT);
         $scorePercent = $totalPossible > 0 ? (int) round(($totalEarned / $totalPossible) * 100) : 0;
-        $passed = $scorePercent >= self::PASS_THRESHOLD_PERCENT;
+        $passed = $scorePercent >= $passThreshold;
         $nextLevel = self::NEXT_LEVEL[$levelCode] ?? 'MAESTRIA';
 
         // Calculate structured section performance with percentages
         $sectionPerformance = [];
+        $weakSkills = [];
         foreach ($skillBreakdown as $skill => $data) {
+            $pct = $data['total'] > 0 ? (int) round(($data['earned'] / $data['total']) * 100) : 0;
             $sectionPerformance[$skill] = [
                 'earned' => $data['earned'],
                 'total' => $data['total'],
-                'percent' => $data['total'] > 0 ? (int) round(($data['earned'] / $data['total']) * 100) : 0,
+                'percent' => $pct,
             ];
+            if ($pct < $passThreshold) {
+                $weakSkills[] = $skill;
+            }
         }
 
-        return DB::transaction(function () use ($user, $profile, $levelCode, $scorePercent, $passed, $nextLevel, $sectionPerformance, $detailedResults) {
+        // Query targeted remedial lessons based on actual weak skills or mistakes
+        $recommendedLessons = [];
+        $unitIds = Unit::whereHas('level', function ($q) use ($levelCode) {
+            $q->where('code', $levelCode);
+        })->pluck('id');
+
+        if (!empty($weakSkills)) {
+            $recommendedLessons = \App\Models\Lesson::whereIn('unit_id', $unitIds)
+                ->where(function ($q) use ($weakSkills) {
+                    $q->whereIn('skill_category', $weakSkills)
+                      ->orWhereNull('skill_category');
+                })
+                ->select(['id', 'title', 'title_ar', 'skill_category', 'estimated_minutes'])
+                ->take(4)
+                ->get()
+                ->toArray();
+        }
+
+        if (empty($recommendedLessons)) {
+            $recommendedLessons = \App\Models\Lesson::whereIn('unit_id', $unitIds)
+                ->select(['id', 'title', 'title_ar', 'skill_category', 'estimated_minutes'])
+                ->take(2)
+                ->get()
+                ->toArray();
+        }
+
+        return DB::transaction(function () use ($user, $profile, $levelCode, $scorePercent, $passed, $nextLevel, $passThreshold, $sectionPerformance, $detailedResults, $recommendedLessons) {
             $xpAwarded = 0;
             $feedbackAr = '';
             $completedLevels = $profile?->completed_levels ?? [];
@@ -232,38 +264,67 @@ class LevelExamController extends Controller
                     );
                 }
 
-                $feedbackAr = "تهانينا! لقد حققت نسبة {$scorePercent}% (الحد الأدنى المطلوب 80%) واجتزت اختبار المستوى {$levelCode}. تم فتح المستوى التالي ({$nextLevel}) بنجاح.";
+                $feedbackAr = "تهانينا! لقد حققت نسبة {$scorePercent}% (الحد الأدنى المطلوب {$passThreshold}%) واجتزت اختبار المستوى {$levelCode}. تم فتح المستوى التالي ({$nextLevel}) بنجاح.";
             } else {
-                $feedbackAr = "لقد حصلت على {$scorePercent}%. الحد الأدنى المطلوب لاجتياز المستوى هو 80%. راجع تقرير المهارات والملاحظات أدناه ثم أعد المحاولة.";
+                $feedbackAr = "لقد حصلت على {$scorePercent}%. الحد الأدنى المطلوب لاجتياز المستوى هو {$passThreshold}%. يوصى بمراجعة الدروس الموصى بها أدناه لتقوية المهارات التي واجهت فيها صعوبة قبل إعادة المحاولة.";
             }
+
+            $previousAttempts = LevelExamAttempt::where('user_id', $user->id)->where('cefr_level', $levelCode)->count();
+            $attemptNumber = $previousAttempts + 1;
 
             // Persist full assessment attempt history
             $attempt = LevelExamAttempt::create([
                 'user_id' => $user->id,
                 'cefr_level' => $levelCode,
+                'attempt_number' => $attemptNumber,
                 'score_percent' => $scorePercent,
                 'passed' => $passed,
                 'skill_breakdown' => $sectionPerformance,
                 'feedback_ar' => $feedbackAr,
+                'recommended_lessons' => $recommendedLessons,
                 'xp_awarded' => $xpAwarded,
                 'completed_at' => now(),
             ]);
 
             return response()->json([
                 'attempt_id' => $attempt->id,
+                'attempt_number' => $attemptNumber,
                 'passed' => $passed,
                 'score_percent' => $scorePercent,
-                'pass_threshold_percent' => self::PASS_THRESHOLD_PERCENT,
+                'pass_threshold_percent' => $passThreshold,
                 'current_level' => $levelCode,
                 'next_level' => $passed ? $nextLevel : null,
                 'feedback_ar' => $feedbackAr,
                 'xp_awarded' => $xpAwarded,
                 'section_performance' => $sectionPerformance,
+                'recommended_lessons' => $recommendedLessons,
                 'detailed_results' => $detailedResults,
                 'unlocked_levels' => $completedLevels,
                 'max_unlocked_level' => $profile?->max_unlocked_level ?? $levelCode,
-                'academic_disclaimer_ar' => 'هذا التقييم مصمم لمتابعة التقدم الأكاديمي الداخلي بالمنصة، ولا يحل محل شهادات DELE / SIELE الرسمية لـ CEFR.',
+                'academic_disclaimer_ar' => 'الاختبار متعدد الخيارات يقيم بدقة الكفاءات المعجمية والقواعدية والاستيعاب القرائي والسمعي. ولا يحل بمفرده محل التقييم الشفوي والمقالي المباشر (المتاح عبر استوديو اليوميات التعبيرية والتحدث الصوتي التفاعلي بالمنصة).',
             ]);
         });
+    }
+
+    /**
+     * Get exam attempt history for a specific level.
+     */
+    public function history(Request $request, string $levelCode): JsonResponse
+    {
+        $levelCode = strtoupper($levelCode);
+        $user = $request->user();
+
+        $attempts = LevelExamAttempt::where('user_id', $user->id)
+            ->where('cefr_level', $levelCode)
+            ->orderBy('attempt_number', 'desc')
+            ->get();
+
+        return response()->json([
+            'level_code' => $levelCode,
+            'total_attempts' => $attempts->count(),
+            'best_score' => $attempts->max('score_percent') ?? 0,
+            'is_passed' => $attempts->where('passed', true)->isNotEmpty(),
+            'attempts' => $attempts,
+        ]);
     }
 }

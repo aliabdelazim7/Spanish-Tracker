@@ -68,6 +68,21 @@ class User extends Authenticatable
         return $this->belongsToMany(Achievement::class, 'user_achievements')->withPivot('unlocked_at');
     }
 
+    public function pushSubscriptions()
+    {
+        return $this->hasMany(PushSubscription::class);
+    }
+
+    public function notificationPreference()
+    {
+        return $this->hasOne(NotificationPreference::class);
+    }
+
+    public function notificationLogs()
+    {
+        return $this->hasMany(NotificationLog::class);
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';

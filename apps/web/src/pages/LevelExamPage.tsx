@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { levelsApi } from '../api/levels';
 import { playSpanishAudio } from '../utils/speech';
+import { AudioSpeakerButton } from '../components/AudioSpeakerButton';
 import confetti from 'canvas-confetti';
 import {
   Award,
@@ -215,6 +216,59 @@ export const LevelExamPage: React.FC = () => {
           </div>
         )}
 
+        {/* Targeted Remedial Lessons */}
+        {examResult.recommended_lessons && examResult.recommended_lessons.length > 0 && (
+          <div className="bg-amber-50/80 rounded-2xl border border-amber-200 p-6 space-y-4 shadow-sm">
+            <h4 className="text-base font-bold text-amber-950 flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-amber-600" />
+              <span>دروس موصى بها للمراجعة وسد الفجوات (Targeted Remediation):</span>
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {examResult.recommended_lessons.map((lsn: any) => (
+                <Link
+                  key={lsn.id}
+                  to={`/lessons/${lsn.id}`}
+                  className="p-4 bg-white rounded-xl border border-amber-200/80 hover:border-amber-400 hover:shadow-xs transition flex items-center justify-between gap-3 group"
+                >
+                  <div className="space-y-1">
+                    <p className="font-bold text-stone-900 group-hover:text-amber-700 transition">
+                      {lsn.title_ar || lsn.title}
+                    </p>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">
+                      {lsn.skill_category || 'مهارة أساسية'}
+                    </span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-stone-400 group-hover:text-amber-600 rtl:rotate-180 transition" />
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Productive Assessment Links (Writing & Speaking) */}
+        <div className="bg-emerald-50/60 rounded-2xl border border-emerald-200 p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="space-y-1 text-right">
+            <h5 className="text-sm font-bold text-emerald-950">تقييم مهارات الإنتاج (الكتابة والمحادثة):</h5>
+            <p className="text-xs text-emerald-800">
+              عزز كفاءتك اللغوية الشاملة عبر التعبير الحر في دفتر اليوميات والتدرب مع المعلم الصوتي الذكي.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              to="/journal"
+              className="px-4 py-2 bg-white border border-emerald-300 text-emerald-900 text-xs font-bold rounded-xl hover:bg-emerald-100 transition shadow-xs"
+            >
+              دفتر اليوميات
+            </Link>
+            <Link
+              to="/speaking-tutor"
+              className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 transition shadow-xs"
+            >
+              المعلم الصوتي
+            </Link>
+          </div>
+        </div>
+
         {/* Detailed Breakdown */}
         {examResult.detailed_results && (
           <div className="bg-white rounded-2xl border p-6 space-y-4 shadow-sm">
@@ -295,13 +349,7 @@ export const LevelExamPage: React.FC = () => {
           <span className="text-xs px-3 py-1 bg-gray-100 text-gray-700 font-semibold rounded-full uppercase">
             قسم {currentQ.skill_category}
           </span>
-          <button
-            onClick={() => playSpanishAudio(currentQ.question_text)}
-            className="p-2 text-amber-600 hover:bg-amber-50 rounded-full transition"
-            title="استمع للنطق الإسباني"
-          >
-            <Volume2 className="w-5 h-5" />
-          </button>
+          <AudioSpeakerButton text={currentQ.question_text} size="sm" showSlowButton={true} />
         </div>
 
         <div className="space-y-2">

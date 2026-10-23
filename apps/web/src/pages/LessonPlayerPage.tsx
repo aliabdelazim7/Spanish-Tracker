@@ -11,10 +11,22 @@ import {
   XCircle,
   Sparkles,
   ArrowRight,
+  RotateCcw,
   Award,
-  BookOpen
+  BookOpen,
+  Headphones,
+  Volume2,
+  Download,
+  WifiOff
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import {
+  saveLessonOffline,
+  getOfflineLesson,
+  isLessonSavedOffline,
+  removeOfflineLesson,
+  queueOfflineProgress
+} from '../utils/offlineStorage';
 
 export const LessonPlayerPage: React.FC = () => {
   const { lessonId } = useParams<{ lessonId: string }>();
@@ -33,6 +45,10 @@ export const LessonPlayerPage: React.FC = () => {
   const [matchingPairsAnswer, setMatchingPairsAnswer] = useState<Record<string, string>>({});
   const [selectedMatchingKey, setSelectedMatchingKey] = useState<string | null>(null);
 
+  // Listening exercise specific states
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [replayCount, setReplayCount] = useState(0);
+
   // Submission & feedback
   const [isAnswered, setIsAnswered] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
@@ -48,9 +64,16 @@ export const LessonPlayerPage: React.FC = () => {
     next_lesson_id: number | null;
   } | null>(null);
 
+  // Offline capabilities
+  const [isOfflineMode, setIsOfflineMode] = useState(!navigator.onLine);
+  const [isSavedOffline, setIsSavedOffline] = useState(false);
+  const [localCorrectCount, setLocalCorrectCount] = useState(0);
+
   useEffect(() => {
     if (lessonId) {
-      loadLesson(parseInt(lessonId, 10));
+      const id = parseInt(lessonId, 10);
+      setIsSavedOffline(isLessonSavedOffline(id));
+      loadLesson(id);
     }
   }, [lessonId]);
 
@@ -62,10 +85,35 @@ export const LessonPlayerPage: React.FC = () => {
       setExercises(data.exercises);
       setCurrentIndex(-1); // start at intro notes
       setIsCompleted(false);
+      setIsOfflineMode(false);
+      // Auto-cache for offline access
+      saveLessonOffline(data.lesson, data.exercises);
+      setIsSavedOffline(true);
     } catch (err) {
-      console.error(err);
+      console.warn('Network startLesson failed, attempting offline cache:', err);
+      const cached = getOfflineLesson(id);
+      if (cached) {
+        setLesson(cached.lesson);
+        setExercises(cached.exercises);
+        setCurrentIndex(-1);
+        setIsCompleted(false);
+        setIsOfflineMode(true);
+      } else {
+        console.error('Lesson not found in offline storage');
+      }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleToggleSaveOffline = () => {
+    if (!lesson) return;
+    if (isSavedOffline) {
+      removeOfflineLesson(lesson.id);
+      setIsSavedOffline(false);
+    } else {
+      saveLessonOffline(lesson, exercises);
+      setIsSavedOffline(true);
     }
   };
 
@@ -81,6 +129,8 @@ export const LessonPlayerPage: React.FC = () => {
     setTranslationInput('');
     setMatchingPairsAnswer({});
     setSelectedMatchingKey(null);
+    setShowTranscript(false);
+    setReplayCount(0);
 
     const ex = exercises[idx];
     if (ex && ex.exercise_type === 'word_order' && ex.options) {
@@ -88,6 +138,35 @@ export const LessonPlayerPage: React.FC = () => {
       setWordOrderBank(optionsArray);
       setWordOrderSelected([]);
     }
+  };
+
+  const handleRetryCurrentExercise = () => {
+    setIsAnswered(false);
+    setIsCorrect(false);
+    setExplanationAr(null);
+    setHintAr(null);
+    setCorrectAnswersRevealed(null);
+    setSelectedOption(null);
+    setSelectedMatchingKey(null);
+    setMatchingPairsAnswer({});
+
+    const currentEx = exercises[currentIndex];
+    if (currentEx && currentEx.exercise_type === 'word_order' && currentEx.options) {
+      const optionsArray = Array.isArray(currentEx.options) ? [...currentEx.options] : [];
+      setWordOrderBank(optionsArray);
+      setWordOrderSelected([]);
+    }
+  };
+
+  const renderCorrectAnswer = (ans: any): string => {
+    if (!ans) return '';
+    if (Array.isArray(ans)) return ans.join(', ');
+    if (typeof ans === 'object') {
+      return Object.entries(ans)
+        .map(([k, v]) => `${k} ➔ ${v}`)
+        .join(' | ');
+    }
+    return String(ans);
   };
 
   const handleStartExercises = () => {
@@ -105,7 +184,7 @@ export const LessonPlayerPage: React.FC = () => {
 
     let payload: any = null;
 
-    if (currentEx.exercise_type === 'multiple_choice' || currentEx.exercise_type === 'fill_blank') {
+    if (currentEx.exercise_type === 'multiple_choice' || currentEx.exercise_type === 'fill_blank' || currentEx.exercise_type === 'listening') {
       payload = selectedOption;
     } else if (currentEx.exercise_type === 'translation') {
       payload = translationInput;
@@ -116,6 +195,29 @@ export const LessonPlayerPage: React.FC = () => {
     }
 
     if (!payload && typeof payload !== 'object') return;
+
+    if (isOfflineMode) {
+      // Offline local evaluation
+      let correct = false;
+      if (Array.isArray(currentEx.correct_answers)) {
+        correct = currentEx.correct_answers.some(
+          (ans: any) => String(ans).trim().toLowerCase() === String(payload).trim().toLowerCase()
+        );
+      } else if (typeof currentEx.correct_answers === 'object') {
+        correct = JSON.stringify(currentEx.correct_answers) === JSON.stringify(payload);
+      } else {
+        correct = String(currentEx.correct_answers).trim().toLowerCase() === String(payload).trim().toLowerCase();
+      }
+
+      setIsCorrect(correct);
+      if (correct) {
+        setLocalCorrectCount((prev) => prev + 1);
+        confetti({ particleCount: 30, spread: 45, origin: { y: 0.7 } });
+      }
+      setCorrectAnswersRevealed(currentEx.correct_answers);
+      setIsAnswered(true);
+      return;
+    }
 
     try {
       const res = await curriculumApi.answerExercise(lesson.id, currentEx.id, payload);
@@ -129,7 +231,22 @@ export const LessonPlayerPage: React.FC = () => {
         confetti({ particleCount: 35, spread: 50, origin: { y: 0.7 } });
       }
     } catch (err) {
-      console.error(err);
+      console.warn('Network answer check failed, falling back to local evaluation:', err);
+      setIsOfflineMode(true);
+      let correct = false;
+      if (Array.isArray(currentEx.correct_answers)) {
+        correct = currentEx.correct_answers.some(
+          (ans: any) => String(ans).trim().toLowerCase() === String(payload).trim().toLowerCase()
+        );
+      } else {
+        correct = String(currentEx.correct_answers).trim().toLowerCase() === String(payload).trim().toLowerCase();
+      }
+      setIsCorrect(correct);
+      if (correct) {
+        setLocalCorrectCount((prev) => prev + 1);
+      }
+      setCorrectAnswersRevealed(currentEx.correct_answers);
+      setIsAnswered(true);
     }
   };
 
@@ -143,6 +260,24 @@ export const LessonPlayerPage: React.FC = () => {
 
   const finishLesson = async () => {
     if (!lesson) return;
+
+    if (isOfflineMode) {
+      const total = Math.max(1, exercises.length);
+      const score = Math.round((localCorrectCount / total) * 100);
+      const xp = Math.round((lesson.xp_reward || 20) * (score / 100));
+
+      queueOfflineProgress(lesson.id, score, xp);
+
+      setCompletionResult({
+        score_percent: score,
+        xp_awarded: xp,
+        next_lesson_id: null,
+      });
+      setIsCompleted(true);
+      confetti({ particleCount: 90, spread: 70, origin: { y: 0.5 } });
+      return;
+    }
+
     try {
       const res = await curriculumApi.completeLesson(lesson.id);
       setCompletionResult({
@@ -153,7 +288,20 @@ export const LessonPlayerPage: React.FC = () => {
       setIsCompleted(true);
       confetti({ particleCount: 90, spread: 70, origin: { y: 0.5 } });
     } catch (err) {
-      console.error(err);
+      console.warn('Online completion failed, queuing offline progress:', err);
+      const total = Math.max(1, exercises.length);
+      const score = Math.round((localCorrectCount / total) * 100);
+      const xp = Math.round((lesson.xp_reward || 20) * (score / 100));
+
+      queueOfflineProgress(lesson.id, score, xp);
+
+      setCompletionResult({
+        score_percent: score,
+        xp_awarded: xp,
+        next_lesson_id: null,
+      });
+      setIsCompleted(true);
+      confetti({ particleCount: 90, spread: 70, origin: { y: 0.5 } });
     }
   };
 
@@ -222,6 +370,12 @@ export const LessonPlayerPage: React.FC = () => {
             <p className="text-sm text-stone-600">
               أنهيت درس <span className="font-bold text-[#1B4D3E]">"{lesson.title_ar}"</span> بنجاح.
             </p>
+            {isOfflineMode && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold mt-1">
+                <WifiOff className="w-3.5 h-3.5" />
+                <span>تم حفظ إنجازك محلياً، وستتم مزامنة نقاط الـ XP مع الخادم عند عودة الإنترنت.</span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4 w-full">
@@ -278,9 +432,24 @@ export const LessonPlayerPage: React.FC = () => {
               <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
                 {lesson.unit?.title_ar || 'وحدة تعليمية'}
               </span>
-              <span className="text-xs text-stone-400 font-medium">
-                {lesson.estimated_minutes} دقائق • {exercises.length} تدريبات
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleToggleSaveOffline}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                    isSavedOffline
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : 'bg-stone-50 text-stone-600 border-stone-200 hover:border-emerald-300'
+                  }`}
+                  title="حفظ الدرس للتدرب بدون اتصال بالإنترنت"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{isSavedOffline ? 'محفوظ بدون إنترنت ✓' : 'حفظ بدون إنترنت'}</span>
+                </button>
+                <span className="text-xs text-stone-400 font-medium">
+                  {lesson.estimated_minutes} دقائق • {exercises.length} تدريبات
+                </span>
+              </div>
             </div>
 
             <div className="space-y-2 text-right">
@@ -364,18 +533,77 @@ export const LessonPlayerPage: React.FC = () => {
               {currentEx.exercise_type === 'fill_blank' && 'أكمل الفراغ'}
               {currentEx.exercise_type === 'word_order' && 'ترتيب الكلمات'}
               {currentEx.exercise_type === 'matching_pairs' && 'توصيل الكلمات'}
+              {currentEx.exercise_type === 'listening' && 'استماع وفهم سياقي'}
             </span>
             <h2 className="text-lg sm:text-xl font-bold text-stone-900 pt-1">
               {currentEx.prompt_ar}
             </h2>
-            <div className="flex items-center justify-end gap-2 text-base font-semibold text-[#1B4D3E]">
-              <span className="bidi-isolate">{currentEx.prompt}</span>
-              <AudioSpeakerButton text={currentEx.prompt} size="sm" showSlowButton={true} />
-            </div>
+            {currentEx.exercise_type !== 'listening' && (
+              <div className="flex items-center justify-end gap-2 text-base font-semibold text-[#1B4D3E]">
+                <span className="bidi-isolate">{currentEx.prompt}</span>
+                <AudioSpeakerButton text={currentEx.prompt} size="sm" showSlowButton={true} />
+              </div>
+            )}
           </div>
 
-          {/* Exercise Type 1 & 2: Multiple Choice & Fill Blank */}
-          {(currentEx.exercise_type === 'multiple_choice' || currentEx.exercise_type === 'fill_blank') && (
+          {/* Listening Exercise Audio Player & Scaffolding */}
+          {currentEx.exercise_type === 'listening' && (
+            <div className="p-6 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-4 text-center">
+              <div className="flex items-center justify-between text-xs text-stone-600">
+                <span className="font-bold text-amber-900 flex items-center gap-1.5">
+                  <Headphones className="w-4 h-4 text-amber-600" />
+                  <span>استمع بانتباه للمقطع الصوتي الإسباني، ثم اختر الإجابة الصحيحة:</span>
+                </span>
+                <span className="px-2.5 py-1 rounded-md bg-white border border-amber-200 text-amber-900 font-bold">
+                  مرات الاستماع: {replayCount}
+                </span>
+              </div>
+
+              <div className="py-3 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplayCount((c) => c + 1);
+                    playSpanishAudio(currentEx.prompt);
+                  }}
+                  className="px-6 py-3 rounded-2xl bg-[#1B4D3E] text-white font-bold text-sm shadow-md hover:bg-[#153e32] flex items-center gap-2 cursor-pointer transition-all"
+                >
+                  <Volume2 className="w-5 h-5 text-amber-300" />
+                  <span>تشغيل المقطع (نطق أصيل)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReplayCount((c) => c + 1);
+                    playSpanishAudio(currentEx.prompt, 0.72);
+                  }}
+                  className="px-4 py-3 rounded-2xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs shadow-2xs flex items-center gap-1.5 cursor-pointer transition-all"
+                  title="استمع بنطق تعليمي متمهل"
+                >
+                  <span>🐢 بطيء (0.7x)</span>
+                </button>
+              </div>
+
+              {/* Scaffolding Transcript Toggle */}
+              <div className="pt-1 border-t border-amber-200/60">
+                <button
+                  type="button"
+                  onClick={() => setShowTranscript(!showTranscript)}
+                  className="text-xs font-semibold text-stone-500 hover:text-stone-800 underline cursor-pointer"
+                >
+                  {showTranscript ? 'إخفاء النص المكتوب ✕' : 'إظهار النص المكتوب للمساعدة (Scaffolding) 👁️'}
+                </button>
+                {showTranscript && (
+                  <div className="mt-2 p-3 rounded-xl bg-white border border-amber-200 text-sm font-bold text-stone-800" dir="ltr">
+                    "{currentEx.prompt}"
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Exercise Type 1, 2 & Listening: Multiple Choice, Fill Blank, Listening */}
+          {(currentEx.exercise_type === 'multiple_choice' || currentEx.exercise_type === 'fill_blank' || currentEx.exercise_type === 'listening') && (
             <div className="space-y-3 pt-2">
               {currentEx.options?.map((opt: string, i: number) => {
                 const isSelected = selectedOption === opt;
@@ -562,7 +790,10 @@ export const LessonPlayerPage: React.FC = () => {
 
               {!isCorrect && correctAnswersRevealed && (
                 <div className="text-xs font-semibold text-stone-800 pt-1">
-                  الإجابة النموذجية: <span className="font-bold bidi-isolate">{JSON.stringify(correctAnswersRevealed)}</span>
+                  الإجابة النموذجية:{' '}
+                  <span className="font-bold text-emerald-800 bidi-isolate">
+                    {renderCorrectAnswer(correctAnswersRevealed)}
+                  </span>
                 </div>
               )}
             </div>
@@ -574,14 +805,31 @@ export const LessonPlayerPage: React.FC = () => {
           {!isAnswered ? (
             <button
               onClick={handleCheckAnswer}
-              className="w-full py-4 rounded-2xl bg-[#1B4D3E] text-white font-bold text-base shadow-md hover:bg-[#153e32] transition-all"
+              className="w-full py-4 rounded-2xl bg-[#1B4D3E] text-white font-bold text-base shadow-md hover:bg-[#153e32] transition-all focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2 cursor-pointer"
             >
               تحقق من الإجابة
             </button>
+          ) : !isCorrect ? (
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
+              <button
+                onClick={handleRetryCurrentExercise}
+                className="w-full sm:w-1/2 py-3.5 rounded-2xl bg-white border-2 border-stone-300 text-stone-800 font-bold text-sm hover:border-[#1B4D3E] hover:text-[#1B4D3E] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#1B4D3E]"
+              >
+                <RotateCcw className="w-4 h-4 text-stone-600" />
+                <span>إعادة المحاولة (تمرن مرة تانية)</span>
+              </button>
+              <button
+                onClick={handleNextStep}
+                className="w-full sm:w-1/2 py-3.5 rounded-2xl bg-[#1B4D3E] text-white font-bold text-sm shadow-md hover:bg-[#153e32] transition-all flex items-center justify-center gap-2 cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2"
+              >
+                <span>{currentIndex < exercises.length - 1 ? 'تخطي ومتابعة' : 'إنهاء الدرس'}</span>
+                <ArrowRight className="w-4 h-4 rotate-180" />
+              </button>
+            </div>
           ) : (
             <button
               onClick={handleNextStep}
-              className="w-full py-4 rounded-2xl bg-[#1B4D3E] text-white font-bold text-base shadow-md hover:bg-[#153e32] transition-all flex items-center justify-center gap-2"
+              className="w-full py-4 rounded-2xl bg-[#1B4D3E] text-white font-bold text-base shadow-md hover:bg-[#153e32] transition-all flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:ring-offset-2 cursor-pointer"
             >
               <span>{currentIndex < exercises.length - 1 ? 'التمرين التالي' : 'إنهاء الدرس وحساب النتائج'}</span>
               <ArrowRight className="w-4 h-4 rotate-180" />

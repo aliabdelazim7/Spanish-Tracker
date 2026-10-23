@@ -34,11 +34,16 @@ class VocabularySeeder extends Seeder
                     'phonetic' => $item['phonetic'] ?? null,
                     'part_of_speech' => $item['part_of_speech'] ?? 'noun',
                     'gender' => $item['gender'] ?? null,
+                    'plural_form' => $item['plural_form'] ?? null,
                     'is_irregular' => (bool) ($item['is_irregular'] ?? false),
                     'arabic_meaning' => $item['arabic_meaning'],
+                    'english_meaning' => $item['english_meaning'] ?? null,
                     'example_sentence_es' => $item['example_sentence_es'] ?? '',
                     'example_sentence_ar' => $item['example_sentence_ar'] ?? '',
+                    'example_sentence_en' => $item['example_sentence_en'] ?? '',
                     'topic' => $item['topic'] ?? 'general',
+                    'notes' => $item['notes'] ?? null,
+                    'conjugation_data' => $item['conjugation_data'] ?? null,
                     'is_published' => true,
                 ]
             );

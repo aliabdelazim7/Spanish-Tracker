@@ -11,7 +11,8 @@ import {
   Settings,
   HelpCircle,
   PenTool,
-  AlertTriangle
+  AlertTriangle,
+  Bell
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -25,6 +26,7 @@ export const Sidebar: React.FC = () => {
     { to: '/speak', label: 'استوديو التحدث الذكي', icon: Mic },
     { to: '/progress', label: 'الإحصائيات والأوسمة', icon: Award },
     { to: '/placement-test', label: 'اختبار تحديد المستوى', icon: TrendingUp },
+    { to: '/settings/notifications', label: 'إعدادات الإشعارات والتذكير', icon: Bell },
     { to: '/profile', label: 'الإعدادات الشخصية', icon: Settings },
   ];
 

@@ -22,6 +22,7 @@ class VocabularyController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
+        $userLevel = $user->profile?->max_unlocked_level ?? ($user->profile?->estimated_cefr_level ?? 'A1');
 
         // Paginated user vocabulary items
         $userVocab = UserVocabulary::where('user_id', $user->id)
@@ -33,11 +34,22 @@ class VocabularyController extends Controller
         $savedIds = UserVocabulary::where('user_id', $user->id)->pluck('vocabulary_item_id')->toArray();
         $query = VocabularyItem::where('is_published', true)->whereNotIn('id', $savedIds);
 
-        if ($request->has('level')) {
-            $query->where('cefr_level', $request->query('level'));
+        // Restrict level: Learner only sees their current unlocked level (cannot inspect future locked levels)
+        $levelOrder = ['A1' => 1, 'A2' => 2, 'B1' => 3, 'B2' => 4, 'C1' => 5, 'C2' => 6];
+        $userRank = $levelOrder[$userLevel] ?? 1;
+
+        $targetLevel = $request->query('level', $userLevel);
+        $targetRank = $levelOrder[$targetLevel] ?? 1;
+
+        // If requested level is locked/beyond learner progress, lock to current active level
+        if ($targetRank > $userRank || $targetLevel === 'ALL') {
+            $targetLevel = $userLevel;
         }
 
-        $availableItems = $query->limit(100)->get();
+        $query->where('cefr_level', $targetLevel);
+
+        // Fetch all catalog items for this level without premature truncation so every category is populated
+        $availableItems = $query->orderBy('id')->get();
 
         $stats = [
             'total_saved' => count($savedIds),
@@ -49,6 +61,8 @@ class VocabularyController extends Controller
         return response()->json([
             'user_vocabulary' => $userVocab,
             'available_catalog' => $availableItems,
+            'current_level' => $targetLevel,
+            'user_max_level' => $userLevel,
             'stats' => $stats,
         ]);
     }

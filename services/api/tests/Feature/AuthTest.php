@@ -77,4 +77,87 @@ class AuthTest extends TestCase
         $response = $this->getJson('/api/v1/auth/me');
         $response->assertStatus(401);
     }
+
+    public function test_password_reset_requires_valid_token_and_rejects_missing_or_invalid_token(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'victim@example.com',
+            'password' => bcrypt('OriginalPassword123!'),
+        ]);
+
+        // Attempt without token
+        $response = $this->postJson('/api/v1/auth/reset-password', [
+            'email' => 'victim@example.com',
+            'password' => 'NewPassword123!',
+            'password_confirmation' => 'NewPassword123!',
+        ]);
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['token']);
+
+        // Attempt with wrong token
+        $response = $this->postJson('/api/v1/auth/reset-password', [
+            'email' => 'victim@example.com',
+            'token' => 'invalid-token-123',
+            'password' => 'NewPassword123!',
+            'password_confirmation' => 'NewPassword123!',
+        ]);
+        $response->assertStatus(422);
+
+        // Password should remain unchanged
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('OriginalPassword123!', $user->fresh()->password));
+    }
+
+    public function test_password_reset_succeeds_with_valid_token_and_revokes_previous_tokens(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'student@example.com',
+            'password' => bcrypt('OldPassword123!'),
+        ]);
+        $user->createToken('active_session_token');
+
+        $this->assertCount(1, $user->tokens);
+
+        // Request reset
+        $forgotResponse = $this->postJson('/api/v1/auth/forgot-password', [
+            'email' => 'student@example.com',
+        ]);
+        $forgotResponse->assertStatus(200);
+        $token = $forgotResponse->json('debug_token');
+        $this->assertNotEmpty($token);
+
+        // Submit valid reset
+        $resetResponse = $this->postJson('/api/v1/auth/reset-password', [
+            'email' => 'student@example.com',
+            'token' => $token,
+            'password' => 'BrandNewPassword123!',
+            'password_confirmation' => 'BrandNewPassword123!',
+        ]);
+        $resetResponse->assertStatus(200);
+
+        // Password updated
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('BrandNewPassword123!', $user->fresh()->password));
+
+        // Old access tokens revoked
+        $this->assertCount(0, $user->fresh()->tokens);
+
+        // Token consumed from password_reset_tokens
+        $this->assertDatabaseMissing('password_reset_tokens', ['email' => 'student@example.com']);
+    }
+
+    public function test_regular_learner_cannot_access_admin_overview(): void
+    {
+        $learner = User::factory()->create(['role' => 'learner']);
+
+        $response = $this->actingAs($learner)->getJson('/api/v1/admin/overview');
+        $response->assertStatus(403);
+    }
+
+    public function test_admin_user_can_access_admin_overview(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $response = $this->actingAs($admin)->getJson('/api/v1/admin/overview');
+        $response->assertStatus(200)
+            ->assertJsonStructure(['stats', 'recent_lessons']);
+    }
 }

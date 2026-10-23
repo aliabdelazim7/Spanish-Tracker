@@ -22,7 +22,8 @@ import {
   HelpCircle,
   PenTool,
   AlertTriangle,
-  Globe
+  Globe,
+  Bell
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -59,6 +60,7 @@ export const Navbar: React.FC = () => {
     { to: '/speak', label: 'استوديو التحدث الذكي', icon: Mic },
     { to: '/progress', label: 'الإحصائيات والأوسمة', icon: Award },
     { to: '/placement-test', label: 'اختبار تحديد المستوى', icon: TrendingUp },
+    { to: '/settings/notifications', label: 'إعدادات الإشعارات والتذكير', icon: Bell },
     { to: '/profile', label: 'الإعدادات الشخصية', icon: Settings },
   ];
 

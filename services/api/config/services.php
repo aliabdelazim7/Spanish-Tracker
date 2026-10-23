@@ -41,4 +41,10 @@ return [
         'model' => env('AI_MODEL', 'gpt-4o-mini'),
     ],
 
+    'webpush' => [
+        'public_key' => env('VAPID_PUBLIC_KEY', 'BEQA0rjQOwpq5CAXSFb3vvmqpMJcrp0GEnnJB1pFSlo--SwfLucP_-NPMDVPHI6WxZn-Ktv4cnK2SkvT7CE79ys'),
+        'private_key' => env('VAPID_PRIVATE_KEY', 'wc43PbVLkfE6uRj9m9PHzcjk6Rog063xIsMmNMKzPGg'),
+        'subject' => env('VAPID_SUBJECT', 'mailto:admin@ruta-espanol.com'),
+    ],
+
 ];

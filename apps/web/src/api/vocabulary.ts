@@ -2,12 +2,14 @@ import { apiClient } from './client';
 import { UserVocabulary, VocabularyItem } from '../types';
 
 export const vocabularyApi = {
-  getVocabulary: (page = 1) =>
+  getVocabulary: (page = 1, level?: string) =>
     apiClient<{
       user_vocabulary: { data: UserVocabulary[]; current_page: number; last_page: number };
       available_catalog: VocabularyItem[];
+      current_level?: string;
+      user_max_level?: string;
       stats: { total_saved: number; mastered_count: number; learning_count: number; due_count: number };
-    }>(`/vocabulary?page=${page}`),
+    }>(`/vocabulary?page=${page}${level ? `&level=${encodeURIComponent(level)}` : ''}`),
 
   getDueReviews: () =>
     apiClient<{ due_items: UserVocabulary[]; count: number }>('/vocabulary/reviews/due'),

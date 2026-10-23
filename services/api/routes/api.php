@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\JournalController;
 use App\Http\Controllers\Api\LevelExamController;
 use App\Http\Controllers\Api\LessonSessionController;
 use App\Http\Controllers\Api\MyMistakesController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OnboardingController;
 use App\Http\Controllers\Api\PlacementTestController;
 use App\Http\Controllers\Api\StoryController;
@@ -26,8 +27,9 @@ Route::prefix('v1')->group(function () {
     // Public Curriculum browsing
     Route::get('/levels', [CurriculumController::class, 'levels']);
 
-    // Public High-Fidelity Audio / Pronunciation Stream
+    // Public High-Fidelity Audio / Pronunciation Stream & Capabilities
     Route::get('/audio/tts', [AudioController::class, 'tts']);
+    Route::get('/audio/capabilities', [AudioController::class, 'capabilities']);
 
     // Protected Routes (requires Sanctum token)
     Route::middleware('auth:sanctum')->group(function () {
@@ -54,6 +56,7 @@ Route::prefix('v1')->group(function () {
         // Level Graduation Exams & Assessment
         Route::get('/levels/{levelCode}/exam', [LevelExamController::class, 'getExam']);
         Route::post('/levels/{levelCode}/exam/submit', [LevelExamController::class, 'submitExam']);
+        Route::get('/levels/{levelCode}/exam/history', [LevelExamController::class, 'history']);
 
         // Lesson Session
         Route::post('/lessons/{lessonId}/start', [LessonSessionController::class, 'start']);
@@ -74,11 +77,15 @@ Route::prefix('v1')->group(function () {
         Route::delete('/vocabulary/{vocabularyId}/save', [VocabularyController::class, 'unsaveItem']);
         Route::post('/vocabulary/{vocabularyId}/review', [VocabularyController::class, 'reviewItem']);
 
-        // AI Tutor
-        Route::post('/tutor/explain', [AiTutorController::class, 'explain']);
-        Route::post('/tutor/correct', [AiTutorController::class, 'correct']);
-        Route::post('/tutor/practice', [AiTutorController::class, 'practice']);
-        Route::post('/tutor/speaking-feedback', [AiTutorController::class, 'speakingFeedback']);
+        // AI Tutor (Protected by rate limiting and character validation)
+        Route::middleware('throttle:60,1')->group(function () {
+            Route::post('/tutor/explain', [AiTutorController::class, 'explain']);
+            Route::post('/tutor/correct', [AiTutorController::class, 'correct']);
+            Route::post('/tutor/practice', [AiTutorController::class, 'practice']);
+            Route::post('/tutor/speaking-feedback', [AiTutorController::class, 'speakingFeedback']);
+            Route::post('/tutor/hint', [AiTutorController::class, 'hint']);
+            Route::post('/tutor/evaluate-exercise', [AiTutorController::class, 'evaluateExercise']);
+        });
 
         // Dashboard & Gamification
         Route::get('/dashboard', [DashboardController::class, 'index']);
@@ -88,6 +95,14 @@ Route::prefix('v1')->group(function () {
         // Spanish Journal & Writing Analysis
         Route::get('/journal', [JournalController::class, 'index']);
         Route::post('/journal', [JournalController::class, 'store']);
+        Route::get('/journal/prompts', [JournalController::class, 'prompts']);
+        Route::get('/journal/daily-prompt', [JournalController::class, 'dailyPrompt']);
+        Route::get('/journal/follow-up-exercises', [JournalController::class, 'followUpExercises']);
+        Route::post('/journal/submit-follow-up', [JournalController::class, 'submitFollowUp']);
+        Route::get('/journal/recurring-mistakes', [JournalController::class, 'recurringMistakes']);
+        Route::get('/journal/recommended-lessons', [JournalController::class, 'recommendedLessons']);
+        Route::get('/journal/progress-stats', [JournalController::class, 'progressStats']);
+        Route::patch('/journal/suggestions/{id}/status', [JournalController::class, 'updateSuggestionStatus']);
         Route::get('/journal/{id}', [JournalController::class, 'show']);
         Route::patch('/journal/{id}', [JournalController::class, 'update']);
         Route::delete('/journal/{id}', [JournalController::class, 'destroy']);
@@ -99,8 +114,16 @@ Route::prefix('v1')->group(function () {
         Route::get('/my-mistakes/{id}', [MyMistakesController::class, 'show']);
         Route::post('/my-mistakes/{id}/practice', [MyMistakesController::class, 'practice']);
 
+        // Web Push Notifications & Learning Reminders
+        Route::get('/notifications/vapid-key', [NotificationController::class, 'getVapidKey']);
+        Route::get('/notifications/preferences', [NotificationController::class, 'getPreferences']);
+        Route::put('/notifications/preferences', [NotificationController::class, 'updatePreferences']);
+        Route::post('/notifications/subscribe', [NotificationController::class, 'subscribe']);
+        Route::post('/notifications/unsubscribe', [NotificationController::class, 'unsubscribe']);
+        Route::post('/notifications/test', [NotificationController::class, 'sendTestNotification']);
+
         // Admin Routes
-        Route::prefix('admin')->group(function () {
+        Route::prefix('admin')->middleware('admin')->group(function () {
             Route::get('/overview', [AdminContentController::class, 'overview']);
             Route::patch('/lessons/{lessonId}/toggle-publish', [AdminContentController::class, 'toggleLessonPublish']);
             Route::patch('/stories/{storyId}/toggle-publish', [AdminContentController::class, 'toggleStoryPublish']);

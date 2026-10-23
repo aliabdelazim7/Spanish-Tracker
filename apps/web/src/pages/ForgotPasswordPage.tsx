@@ -48,13 +48,21 @@ export const ForgotPasswordPage: React.FC = () => {
               <p className="text-sm text-stone-700 leading-relaxed">
                 إذا كان هذا البريد مسجلاً لدينا، فستتلقى تعليمات استعادة كلمة المرور خلال لحظات.
               </p>
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-1.5 text-sm font-bold text-[#1B4D3E] hover:underline"
-              >
-                <span>العودة لصفحة الدخول</span>
-                <ArrowRight className="w-4 h-4 rotate-180" />
-              </Link>
+              <div className="pt-2 flex flex-col gap-2">
+                <Link
+                  to={`/reset-password?email=${encodeURIComponent(email)}`}
+                  className="w-full py-3 px-4 rounded-xl bg-[#1B4D3E] text-white font-bold text-sm shadow-md hover:bg-[#153e32] transition-all text-center inline-block"
+                >
+                  إدخال رمز التحقق وكلمة المرور الجديدة
+                </Link>
+                <Link
+                  to="/login"
+                  className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-stone-500 hover:text-[#1B4D3E] pt-1"
+                >
+                  <span>العودة لصفحة الدخول</span>
+                  <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+                </Link>
+              </div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">

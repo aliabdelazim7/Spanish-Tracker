@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { vocabularyApi } from '../api/vocabulary';
 import { UserVocabulary, VocabularyItem } from '../types';
 import { Navbar } from '../components/Navbar';
@@ -12,14 +13,14 @@ import {
   Eye,
   Search,
   BookOpen,
-  Zap,
-  MessageSquare,
-  Sparkles,
-  Filter
+  Sparkles
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export const VocabularyReviewPage: React.FC = () => {
+  const { user } = useAuth();
+  const learnerCurrentLevel = user?.profile?.max_unlocked_level || user?.profile?.estimated_cefr_level || 'A1';
+
   const [activeTab, setActiveTab] = useState<'catalog' | 'review'>('catalog');
 
   // Review states
@@ -31,20 +32,19 @@ export const VocabularyReviewPage: React.FC = () => {
   // Catalog states
   const [catalogItems, setCatalogItems] = useState<VocabularyItem[]>([]);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
-  const [vocabLevelFilter, setVocabLevelFilter] = useState<string>('A1');
   const [selectedTopic, setSelectedTopic] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [learnerCurrentLevel]);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
       const [dueRes, vocabRes] = await Promise.all([
         vocabularyApi.getDueReviews(),
-        vocabularyApi.getVocabulary(),
+        vocabularyApi.getVocabulary(1, learnerCurrentLevel),
       ]);
 
       setDueItems(dueRes.due_items || []);
@@ -106,10 +106,15 @@ export const VocabularyReviewPage: React.FC = () => {
     { key: 'city_transport', label: '🏙️ مدينة ومواصلات' },
     { key: 'house_daily', label: '🏠 المنزل وأشياء يومية' },
     { key: 'feelings_adjectives', label: '✨ صفات ومشاعر' },
+    { key: 'general', label: '🌿 طبيعة وحياة عامة' },
   ];
 
+  const getCategoryCount = (topicKey: string) => {
+    if (topicKey === 'ALL') return catalogItems.length;
+    return catalogItems.filter((item) => item.topic === topicKey).length;
+  };
+
   const filteredCatalog = catalogItems.filter((item) => {
-    const matchLevel = vocabLevelFilter === 'ALL' || item.cefr_level === vocabLevelFilter;
     const matchTopic = selectedTopic === 'ALL' || item.topic === selectedTopic;
     const matchSearch =
       !searchQuery.trim() ||
@@ -117,7 +122,7 @@ export const VocabularyReviewPage: React.FC = () => {
       item.arabic_meaning.includes(searchQuery) ||
       (item.example_sentence_es && item.example_sentence_es.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    return matchLevel && matchTopic && matchSearch;
+    return matchTopic && matchSearch;
   });
 
   const getPartOfSpeechBadge = (pos: string) => {
@@ -224,41 +229,49 @@ export const VocabularyReviewPage: React.FC = () => {
                   />
                 </div>
 
-                {/* CEFR Level Selector */}
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <span className="text-xs font-bold text-stone-400 ml-2">المستوى:</span>
-                  {['A1', 'A2', 'ALL'].map((lvl) => (
-                    <button
-                      key={lvl}
-                      type="button"
-                      onClick={() => setVocabLevelFilter(lvl)}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                        vocabLevelFilter === lvl
-                          ? 'bg-[#1B4D3E] text-white shadow-xs'
-                          : 'bg-stone-50 text-stone-600 hover:bg-stone-100 border border-stone-200'
-                      }`}
-                    >
-                      {lvl === 'ALL' ? 'كل المستويات' : `مستوى ${lvl}`}
-                    </button>
-                  ))}
+                {/* Active Level Badge - strictly shows learner's current level without leaking future locked levels */}
+                <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-b border-stone-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-stone-500">المستوى الحالي:</span>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#1B4D3E] text-amber-300 font-black text-xs shadow-xs">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>مستوى {learnerCurrentLevel}</span>
+                    </div>
+                  </div>
+                  <span className="text-[11px] text-stone-400 font-medium">
+                    (مفردات مخصصة لمستواك — يتغير للمستوى التالي تلقائياً عند اجتياز الامتحان)
+                  </span>
                 </div>
 
-                {/* Topics Filter */}
+                {/* Topics Filter with dynamic counts */}
                 <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none pt-1">
-                  {topicOptions.map((tp) => (
-                    <button
-                      key={tp.key}
-                      type="button"
-                      onClick={() => setSelectedTopic(tp.key)}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                        selectedTopic === tp.key
-                          ? 'bg-amber-500 text-white shadow-xs'
-                          : 'bg-stone-50 text-stone-600 hover:bg-stone-100 border border-stone-200'
-                      }`}
-                    >
-                      {tp.label}
-                    </button>
-                  ))}
+                  {topicOptions.map((tp) => {
+                    const count = getCategoryCount(tp.key);
+                    const isSelected = selectedTopic === tp.key;
+                    return (
+                      <button
+                        key={tp.key}
+                        type="button"
+                        onClick={() => setSelectedTopic(tp.key)}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all inline-flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-amber-500 text-white shadow-xs'
+                            : 'bg-stone-50 text-stone-600 hover:bg-stone-100 border border-stone-200'
+                        }`}
+                      >
+                        <span>{tp.label}</span>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                            isSelected
+                              ? 'bg-white/25 text-white'
+                              : 'bg-stone-200/90 text-stone-600'
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -278,7 +291,7 @@ export const VocabularyReviewPage: React.FC = () => {
                           <span className="font-black text-lg text-stone-900" dir="ltr">
                             {item.spanish_word}
                           </span>
-                          <AudioSpeakerButton text={item.spanish_word} size="sm" />
+                          <AudioSpeakerButton text={item.spanish_word} size="sm" showSlowButton={true} />
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${posBadge.color}`}
                           >
@@ -294,8 +307,9 @@ export const VocabularyReviewPage: React.FC = () => {
                         </div>
 
                         {item.phonetic && (
-                          <div className="text-xs text-stone-400">
-                            نطق: <span className="text-stone-600 font-medium">{item.phonetic}</span>
+                          <div className="text-xs text-stone-500">
+                            نطق تقريبي: <span className="text-stone-800 font-bold bg-stone-100 px-1.5 py-0.5 rounded text-[11px]">{item.phonetic}</span>
+                            <span className="text-[10px] text-stone-400 mr-1.5" title="تقريب استئناسي بالحروف العربية ولا يغني عن الاستماع للنطق الأصيل">(مساعد تقريبي)</span>
                           </div>
                         )}
 
@@ -303,7 +317,7 @@ export const VocabularyReviewPage: React.FC = () => {
                           <div className="p-2.5 rounded-xl bg-stone-50 border border-stone-100 space-y-1">
                             <div className="text-xs text-stone-800 font-medium flex items-center justify-between gap-2" dir="ltr">
                               <span>"{item.example_sentence_es}"</span>
-                              <AudioSpeakerButton text={item.example_sentence_es} size="sm" />
+                              <AudioSpeakerButton text={item.example_sentence_es} size="sm" showSlowButton={true} />
                             </div>
                             <div className="text-[11px] text-stone-500">
                               {item.example_sentence_ar}
@@ -387,6 +401,7 @@ export const VocabularyReviewPage: React.FC = () => {
                           <AudioSpeakerButton
                             text={currentDue.vocabulary_item?.spanish_word || ''}
                             size="md"
+                            showSlowButton={true}
                           />
                         </div>
 

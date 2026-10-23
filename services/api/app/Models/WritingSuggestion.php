@@ -20,6 +20,14 @@ class WritingSuggestion extends Model
         'explanation_en',
         'example_sentence_es',
         'related_concept_slug',
+        'natural_alternative',
+        'is_understood',
+        'status',
+        'user_notes',
+    ];
+
+    protected $casts = [
+        'is_understood' => 'boolean',
     ];
 
     public function analysis(): BelongsTo

@@ -9,67 +9,84 @@ use App\Models\CefrLevel;
 use App\Models\Lesson;
 use App\Models\LessonExercise;
 use App\Models\LevelExamQuestion;
+use App\Models\PlacementQuestion;
 use App\Models\Story;
-use App\Models\Unit;
 use App\Models\VocabularyItem;
+use App\Services\JournalPromptService;
+use Illuminate\Support\Facades\DB;
 
-$levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
-$report = [];
+echo "==========================================================" . PHP_EOL;
+echo "        COMPREHENSIVE CURRICULUM AUDIT REPORT             " . PHP_EOL;
+echo "==========================================================" . PHP_EOL . PHP_EOL;
 
-foreach ($levels as $code) {
-    $cefr = CefrLevel::where('code', $code)->first();
-    $levelId = $cefr?->id;
+$levels = CefrLevel::orderBy('order_index')->get();
 
-    $units = $levelId ? Unit::where('cefr_level_id', $levelId)->get() : collect();
+$promptService = app(JournalPromptService::class);
+$reflector = new ReflectionClass($promptService);
+$prop = $reflector->getProperty('prompts');
+$prop->setAccessible(true);
+$allPrompts = $prop->getValue($promptService);
+
+foreach ($levels as $level) {
+    $code = $level->code;
+    $units = $level->units;
     $unitIds = $units->pluck('id');
     $lessons = Lesson::whereIn('unit_id', $unitIds)->get();
     $lessonIds = $lessons->pluck('id');
     $exercises = LessonExercise::whereIn('lesson_id', $lessonIds)->get();
-
-    // Vocabulary
-    $vocabCount = VocabularyItem::where('cefr_level', $code)->count();
-    $verbsCount = VocabularyItem::where('cefr_level', $code)->where('part_of_speech', 'verb')->count();
-    $phrasesCount = VocabularyItem::where('cefr_level', $code)
-        ->whereIn('part_of_speech', ['sentence', 'phrase', 'expression'])
+    
+    // Vocabulary counts & normalization
+    $totalVocab = VocabularyItem::where('cefr_level', $code)->count();
+    $uniqueVocab = VocabularyItem::where('cefr_level', $code)
+        ->select(DB::raw('LOWER(TRIM(spanish_word)) as norm_word'))
+        ->distinct()
         ->count();
 
-    // Exercises by type
-    $mcq = $exercises->where('exercise_type', 'multiple_choice')->count();
-    $translation = $exercises->where('exercise_type', 'translation')->count();
-    $fillBlank = $exercises->where('exercise_type', 'fill_blank')->count();
-    $wordOrder = $exercises->where('exercise_type', 'word_order')->count();
-    $matching = $exercises->where('exercise_type', 'matching_pairs')->count();
-    $listening = $exercises->where('exercise_type', 'listening')->count();
-    $reading = $exercises->where('exercise_type', 'reading')->count();
-    $speaking = $exercises->where('exercise_type', 'speaking')->count();
+    $verbs = VocabularyItem::where('cefr_level', $code)->where('part_of_speech', 'verb')->count();
+    $expressions = VocabularyItem::where('cefr_level', $code)->whereIn('part_of_speech', ['phrase', 'expression'])->count();
 
-    // Stories (reading & listening)
-    $storiesCount = Story::where('cefr_level', $code)->count();
+    // Lesson skill distribution
+    $skills = $lessons->groupBy('skill_category')->map->count()->toArray();
+    $exerciseTypes = $exercises->groupBy('exercise_type')->map->count()->toArray();
 
-    // Level Exam Questions
+    // Assessment questions
     $examQuestions = LevelExamQuestion::where('cefr_level', $code)->count();
+    $levelPrompts = isset($allPrompts[$code]) ? count($allPrompts[$code]) : 0;
 
-    $report[$code] = [
-        'level_name_ar' => $cefr?->name_ar ?? 'غير موجود',
-        'units_count' => $units->count(),
-        'lessons_count' => $lessons->count(),
-        'exercises_total' => $exercises->count(),
-        'exercise_breakdown' => [
-            'multiple_choice' => $mcq,
-            'translation' => $translation,
-            'fill_blank' => $fillBlank,
-            'word_order' => $wordOrder,
-            'matching_pairs' => $matching,
-            'listening' => $listening,
-            'reading' => $reading,
-            'speaking' => $speaking,
-        ],
-        'vocabulary_count' => $vocabCount,
-        'verbs_count' => $verbsCount,
-        'practical_expressions_count' => $phrasesCount,
-        'stories_count' => $storiesCount,
-        'final_exam_questions_count' => $examQuestions,
-    ];
+    echo "--- CEFR Level {$code} ({$level->name_ar} - {$level->name}) ---" . PHP_EOL;
+    echo "  * Units: {$units->count()}" . PHP_EOL;
+    echo "  * Lessons: {$lessons->count()}" . PHP_EOL;
+    echo "  * Lesson Exercises: {$exercises->count()}" . PHP_EOL;
+    echo "  * Vocabulary Records: {$totalVocab}" . PHP_EOL;
+    echo "  * Unique Normalized Vocabulary: {$uniqueVocab}" . PHP_EOL;
+    echo "  * Verbs in Lexicon: {$verbs}" . PHP_EOL;
+    echo "  * Practical Expressions / Phrases: {$expressions}" . PHP_EOL;
+    echo "  * Level Exam Questions: {$examQuestions}" . PHP_EOL;
+    echo "  * Journal Prompts: {$levelPrompts}" . PHP_EOL;
+    echo "  * Skills covered in lessons: " . json_encode($skills, JSON_UNESCAPED_UNICODE) . PHP_EOL;
+    echo "  * Exercise types in lessons: " . json_encode($exerciseTypes, JSON_UNESCAPED_UNICODE) . PHP_EOL;
+
+    // Check empty categories
+    $missingSkills = [];
+    foreach (['grammar', 'vocabulary', 'reading', 'listening', 'practical_expressions', 'verbs'] as $sk) {
+        if (!isset($skills[$sk])) {
+            $missingSkills[] = $sk;
+        }
+    }
+    if (!empty($missingSkills)) {
+        echo "  ! Note: Skills not directly tagged in unit lessons: " . implode(', ', $missingSkills) . PHP_EOL;
+    }
+    echo PHP_EOL;
 }
 
-echo json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+echo "==========================================================" . PHP_EOL;
+echo "GLOBAL EDUCATIONAL ASSETS:" . PHP_EOL;
+echo "  * Total Placement Test Questions: " . PlacementQuestion::count() . PHP_EOL;
+echo "  * Total Interactive Stories: " . Story::count() . PHP_EOL;
+$totalPromptsCount = array_sum(array_map('count', $allPrompts));
+echo "  * Total Journal Prompts: " . $totalPromptsCount . PHP_EOL;
+echo "  * Total Exam Questions: " . LevelExamQuestion::count() . PHP_EOL;
+echo "  * Total Vocabulary Items: " . VocabularyItem::count() . PHP_EOL;
+$totalUniqueVocab = VocabularyItem::select(DB::raw('LOWER(TRIM(spanish_word)) as norm_word'))->distinct()->count();
+echo "  * Total Unique Spanish Words: " . $totalUniqueVocab . PHP_EOL;
+echo "==========================================================" . PHP_EOL;

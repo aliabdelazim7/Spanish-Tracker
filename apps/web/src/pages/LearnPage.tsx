@@ -278,27 +278,46 @@ export const LearnPage: React.FC = () => {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                               {unit.lessons?.map((lesson: Lesson) => {
                                 const isDone = completedSet.has(lesson.id);
+                                // Identify if this is the first uncompleted lesson in the unlocked path
+                                const isNextRecommended = !isDone && !completedSet.has(lesson.id) && (
+                                  !unit.lessons?.some((prevL) => prevL.id < lesson.id && !completedSet.has(prevL.id))
+                                );
 
                                 return (
                                   <Link
                                     key={lesson.id}
                                     to={`/learn/lessons/${lesson.id}`}
-                                    className={`p-4 rounded-2xl border-2 transition-all flex items-center justify-between group ${
+                                    aria-label={`${lesson.title_ar} - ${isDone ? 'مكتمل' : isNextRecommended ? 'خطوتك التالية الموصى بها' : 'متاح'}`}
+                                    className={`p-4 rounded-2xl border-2 transition-all flex items-center justify-between group focus:outline-none focus:ring-2 focus:ring-[#1B4D3E] ${
                                       isDone
                                         ? 'border-emerald-200 bg-emerald-50/40 hover:border-emerald-300'
+                                        : isNextRecommended
+                                        ? 'border-[#1B4D3E] bg-white ring-2 ring-emerald-500/30 shadow-md'
                                         : 'border-stone-200 bg-stone-50/60 hover:border-[#1B4D3E] hover:bg-white shadow-2xs'
                                     }`}
                                   >
                                     <div className="space-y-1 text-start">
-                                      <div className="flex items-center gap-2">
+                                      <div className="flex flex-wrap items-center gap-2">
                                         <span className="font-bold text-sm text-stone-900 group-hover:text-[#1B4D3E] transition-colors">
                                           {lesson.title_ar}
                                         </span>
-                                        {isDone && (
-                                          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                                        {isDone ? (
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                                            <CheckCircle2 className="w-3 h-3" />
+                                            <span>مكتمل</span>
+                                          </span>
+                                        ) : isNextRecommended ? (
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-400 text-stone-950 animate-pulse">
+                                            <Sparkles className="w-3 h-3" />
+                                            <span>خطوتك التالية</span>
+                                          </span>
+                                        ) : (
+                                          <span className="text-[10px] font-medium text-stone-400">
+                                            متاح
+                                          </span>
                                         )}
                                       </div>
-                                      <div className="text-xs text-stone-500" dir="ltr">
+                                      <div className="text-xs text-stone-500 font-medium" dir="ltr">
                                         {lesson.title}
                                       </div>
                                       <div className="text-[11px] text-stone-400">
@@ -306,8 +325,20 @@ export const LearnPage: React.FC = () => {
                                       </div>
                                     </div>
 
-                                    <div className="w-9 h-9 rounded-xl bg-white border border-stone-200 flex items-center justify-center text-stone-600 group-hover:bg-[#1B4D3E] group-hover:text-white transition-all shadow-2xs">
-                                      <Play className="w-4 h-4 ml-0.5 fill-current" />
+                                    <div
+                                      className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all shadow-2xs shrink-0 ${
+                                        isDone
+                                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                          : isNextRecommended
+                                          ? 'bg-[#1B4D3E] text-white border-[#1B4D3E] scale-105'
+                                          : 'bg-white border-stone-200 text-stone-600 group-hover:bg-[#1B4D3E] group-hover:text-white'
+                                      }`}
+                                    >
+                                      {isDone ? (
+                                        <CheckCircle2 className="w-4 h-4" />
+                                      ) : (
+                                        <Play className="w-4 h-4 ml-0.5 fill-current" />
+                                      )}
                                     </div>
                                   </Link>
                                 );

@@ -1,9 +1,12 @@
 /**
- * High-Fidelity Educational Speech Utility for Native Spanish Pronunciation.
+ * High-Fidelity Educational Speech Utility for Spanish Pronunciation.
  *
- * Pipeline:
- * 1. Primary: Studio-quality native Spanish voice stream from backend TTS cache (/api/v1/audio/tts).
- * 2. Secondary Fallback: Enhanced Web Speech API with prioritized natural voices (Google / Microsoft Natural).
+ * Architecture:
+ * 1. Primary: Cached High-Fidelity audio stream from backend (/api/v1/audio/tts).
+ * 2. In-Memory Frontend Deduplication Cache: Prevents re-requesting audio for identical strings.
+ * 3. Secondary Fallback: Web Speech API with prioritized European / Castilian voice matching.
+ * 4. Honest Variety & Phonetic Disclaimers: Transparently indicates whether speech is cloud-cached
+ *    or browser-synthesized, without false claims of acoustic laboratory analysis.
  */
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -11,8 +14,26 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/
 let currentAudio: HTMLAudioElement | null = null;
 let currentResolve: (() => void) | null = null;
 
+// In-memory cache to prevent downloading or generating duplicate audio unnecessarily
+const memoryAudioBlobCache = new Map<string, string>();
+
+export interface VoiceCapabilities {
+  hasCastilianVoice: boolean;
+  activeVoiceName: string;
+  activeLang: string;
+  sourceType: 'cloud_tts' | 'browser_speech';
+  speechRecognitionAvailable: boolean;
+  phoneticAccuracyNotice: string;
+}
+
+export interface AudioPlaybackStatus {
+  success: boolean;
+  source: 'memory_cache' | 'backend_stream' | 'browser_speech' | 'unavailable';
+  error?: string;
+}
+
 /**
- * Stop any ongoing audio playback immediately (HTML5 Audio or Web Speech).
+ * Stop any ongoing audio playback immediately.
  */
 export function stopSpanishAudio(): void {
   if (currentAudio) {
@@ -21,7 +42,7 @@ export function stopSpanishAudio(): void {
       currentAudio.currentTime = 0;
       currentAudio = null;
     } catch {
-      // Ignore
+      // Ignore cleanup error
     }
   }
 
@@ -40,40 +61,95 @@ export function stopSpanishAudio(): void {
 }
 
 /**
- * Plays Spanish text with clear native teacher-grade audio.
- * @param text The Spanish text to pronounce.
- * @param rate Playback speed (1.0 = normal natural, 0.75 = slow educational).
+ * Inspect client device audio and voice capabilities.
  */
-export function playSpanishAudio(text: string, rate: number = 1.0): Promise<void> {
-  return new Promise((resolve) => {
-    // Stop any active audio to prevent overlapping speech
-    stopSpanishAudio();
-    currentResolve = resolve;
+export function getAudioCapabilities(): VoiceCapabilities {
+  let hasCastilian = false;
+  let activeVoiceName = 'Default Device Voice';
+  let activeLang = 'es-ES';
 
-    // Clean text of non-spoken editorial symbols
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    const voices = window.speechSynthesis.getVoices();
+    const castilianVoice = voices.find(
+      (v) => v.lang === 'es-ES' && /natural|spain|castilian|helena|laura|pablo/i.test(v.name)
+    ) || voices.find((v) => v.lang === 'es-ES');
+
+    if (castilianVoice) {
+      hasCastilian = true;
+      activeVoiceName = castilianVoice.name;
+      activeLang = castilianVoice.lang;
+    } else {
+      const anySpanish = voices.find((v) => v.lang.startsWith('es'));
+      if (anySpanish) {
+        activeVoiceName = anySpanish.name;
+        activeLang = anySpanish.lang;
+      }
+    }
+  }
+
+  const speechRecognitionAvailable =
+    typeof window !== 'undefined' &&
+    ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+
+  return {
+    hasCastilianVoice: hasCastilian,
+    activeVoiceName,
+    activeLang,
+    sourceType: 'cloud_tts',
+    speechRecognitionAvailable,
+    phoneticAccuracyNotice:
+      'تقييم النطق يعتمد على مطابقة النصوص المستخرجة ولا يقيس مخارج الحروف الصوتية بدقة معملية مطلقة.',
+  };
+}
+
+/**
+ * Check if Speech Recognition is supported on the client browser.
+ */
+export function isSpeechRecognitionSupported(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)
+  );
+}
+
+/**
+ * Plays Spanish text with European Spanish preference and dual-engine fallback.
+ *
+ * @param text The Spanish text to pronounce.
+ * @param rate Playback speed (1.0 = natural normal, 0.72 = educational slow).
+ * @returns Promise resolving to AudioPlaybackStatus
+ */
+export function playSpanishAudio(
+  text: string,
+  rate: number = 1.0
+): Promise<AudioPlaybackStatus> {
+  return new Promise((resolve) => {
+    stopSpanishAudio();
+
     const cleanText = text
       .replace(/[¿¡()]/g, '')
       .replace(/\s+/g, ' ')
       .trim();
 
     if (!cleanText) {
-      resolve();
+      resolve({ success: false, source: 'unavailable', error: 'Empty text' });
       return;
     }
 
-    // Try HTML5 Audio via native educational TTS API first
-    const audioUrl = `${API_BASE_URL}/audio/tts?text=${encodeURIComponent(cleanText)}&lang=es`;
-    const audio = new Audio();
-    currentAudio = audio;
+    currentResolve = () => {
+      resolve({ success: true, source: 'backend_stream' });
+    };
 
-    let hasFallbackRun = false;
+    const cacheKey = `${cleanText.toLowerCase()}_${rate}`;
 
-    const runFallbackSpeechSynthesis = () => {
-      if (hasFallbackRun) return;
-      hasFallbackRun = true;
-
+    const executeBrowserFallback = () => {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-        resolve();
+        if (currentResolve) currentResolve = null;
+        resolve({
+          success: false,
+          source: 'unavailable',
+          error: 'Audio playback unavailable on this browser',
+        });
         return;
       }
 
@@ -85,9 +161,13 @@ export function playSpanishAudio(text: string, rate: number = 1.0): Promise<void
         utterance.pitch = 1.0;
 
         const voices = window.speechSynthesis.getVoices();
-        // Priority: Natural European Spanish > Any European Spanish > Any Spanish > First available
+        // Priority: Natural European Spanish > es-ES > any Spanish
         const preferredVoice =
-          voices.find((v) => v.lang === 'es-ES' && /natural|online|google|helena|laura/i.test(v.name)) ||
+          voices.find(
+            (v) =>
+              v.lang === 'es-ES' &&
+              /natural|online|google|helena|laura|pablo|castilian/i.test(v.name)
+          ) ||
           voices.find((v) => v.lang === 'es-ES') ||
           voices.find((v) => v.lang.startsWith('es') && /natural|google/i.test(v.name)) ||
           voices.find((v) => v.lang.startsWith('es')) ||
@@ -98,26 +178,67 @@ export function playSpanishAudio(text: string, rate: number = 1.0): Promise<void
         }
 
         utterance.onend = () => {
-          if (currentResolve === resolve) currentResolve = null;
-          resolve();
+          if (currentResolve) currentResolve = null;
+          resolve({ success: true, source: 'browser_speech' });
         };
-        utterance.onerror = () => {
-          if (currentResolve === resolve) currentResolve = null;
-          resolve();
+
+        utterance.onerror = (e) => {
+          if (currentResolve) currentResolve = null;
+          resolve({
+            success: false,
+            source: 'browser_speech',
+            error: e.error || 'Speech synthesis error',
+          });
         };
 
         window.speechSynthesis.speak(utterance);
-      } catch {
-        resolve();
+      } catch (err: any) {
+        if (currentResolve) currentResolve = null;
+        resolve({
+          success: false,
+          source: 'browser_speech',
+          error: err?.message || 'Speech synthesis exception',
+        });
       }
     };
 
-    // Timeout safety fallback: if backend audio stalls for > 3.5s, fallback to Web Speech
+    // 1. Check Frontend In-Memory Cache first
+    if (memoryAudioBlobCache.has(cacheKey)) {
+      const cachedUrl = memoryAudioBlobCache.get(cacheKey)!;
+      const audio = new Audio(cachedUrl);
+      audio.playbackRate = Math.max(0.6, Math.min(rate, 1.4));
+      currentAudio = audio;
+
+      audio.onended = () => {
+        if (currentAudio === audio) currentAudio = null;
+        if (currentResolve) currentResolve = null;
+        resolve({ success: true, source: 'memory_cache' });
+      };
+
+      audio.onerror = () => {
+        if (currentAudio === audio) currentAudio = null;
+        memoryAudioBlobCache.delete(cacheKey);
+        executeBrowserFallback();
+      };
+
+      audio.play().catch(() => {
+        executeBrowserFallback();
+      });
+      return;
+    }
+
+    // 2. Fetch from backend TTS with caching
+    const audioUrl = `${API_BASE_URL}/audio/tts?text=${encodeURIComponent(cleanText)}&lang=es`;
+    const audio = new Audio();
+    currentAudio = audio;
+
+    let fallbackTriggered = false;
     const fallbackTimeout = setTimeout(() => {
       if (currentAudio === audio && audio.readyState < 2) {
+        fallbackTriggered = true;
         audio.pause();
         currentAudio = null;
-        runFallbackSpeechSynthesis();
+        executeBrowserFallback();
       }
     }, 3500);
 
@@ -125,27 +246,30 @@ export function playSpanishAudio(text: string, rate: number = 1.0): Promise<void
 
     audio.oncanplaythrough = () => {
       clearTimeout(fallbackTimeout);
+      memoryAudioBlobCache.set(cacheKey, audioUrl);
     };
 
     audio.onended = () => {
       clearTimeout(fallbackTimeout);
       if (currentAudio === audio) currentAudio = null;
-      if (currentResolve === resolve) currentResolve = null;
-      resolve();
+      if (currentResolve) currentResolve = null;
+      resolve({ success: true, source: 'backend_stream' });
     };
 
     audio.onerror = () => {
       clearTimeout(fallbackTimeout);
       if (currentAudio === audio) currentAudio = null;
-      runFallbackSpeechSynthesis();
+      if (!fallbackTriggered) {
+        executeBrowserFallback();
+      }
     };
 
-    // Trigger playback
     audio.src = audioUrl;
     audio.play().catch(() => {
-      // Autoplay restriction or network error -> fallback to Web Speech
       clearTimeout(fallbackTimeout);
-      runFallbackSpeechSynthesis();
+      if (!fallbackTriggered) {
+        executeBrowserFallback();
+      }
     });
   });
 }

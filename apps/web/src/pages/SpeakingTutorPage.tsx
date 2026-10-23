@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { tutorApi } from '../api/tutor';
 import { Navbar } from '../components/Navbar';
 import { Sidebar } from '../components/Sidebar';
 import { AudioSpeakerButton } from '../components/AudioSpeakerButton';
+import { isSpeechRecognitionSupported } from '../utils/speech';
 import {
   Mic,
   MicOff,
@@ -12,7 +13,9 @@ import {
   Volume2,
   Send,
   HelpCircle,
-  RefreshCw
+  RefreshCw,
+  Info,
+  Check
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -256,22 +259,33 @@ export const SpeakingTutorPage: React.FC = () => {
                   {targetPhrases[selectedTargetIndex].ar}
                 </div>
 
-                <div className="pt-2 flex flex-col items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={handleToggleRecord}
-                    className={`w-20 h-20 rounded-full flex items-center justify-center shadow-lg transition-all cursor-pointer ${
-                      isRecording
-                        ? 'bg-red-500 text-white animate-pulse scale-110'
-                        : 'bg-[#1B4D3E] text-white hover:bg-[#153e32] hover:scale-105'
-                    }`}
-                  >
-                    {isRecording ? <MicOff className="w-8 h-8" /> : <Mic className="w-8 h-8" />}
-                  </button>
-                  <span className="text-xs font-bold text-stone-500">
-                    {isRecording ? 'جاري الاستماع... تحدث الآن بالإسبانية' : 'انقر على الميكروفون لبدء التسجيل'}
-                  </span>
-                </div>
+                {/* Audio Caveat or Self-Echo Mode */}
+                {!isSpeechRecognitionSupported() ? (
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-3">
+                    <div className="font-bold flex items-center justify-center gap-1.5 text-sm">
+                      <Info className="w-4 h-4 text-amber-600" />
+                      <span>نمط الاستماع والمحاكاة الذاتية (Listen & Echo Mode)</span>
+                    </div>
+                    <p className="text-stone-600 leading-relaxed font-normal">
+                      متصفحك الحالي لا يدعم التعرف الصوتي المباشر. يمكنك ممارسة النطق بفعالية عبر الاستماع للنموذج الأصيل (طبيعي أو بطيء 🐢)، الترديد بصوت مرتفع، ثم الاستماع مجدداً للمقارنة السمعية.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        confetti({ particleCount: 30, spread: 50, origin: { y: 0.6 } });
+                        alert('ممتاز! الاستمرار في التدريب السمعي والمحاكاة بصوت مرتفع يبني طلاقتك الحقيقية.');
+                      }}
+                      className="px-5 py-2 rounded-xl bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 transition-colors shadow-2xs"
+                    >
+                      نطقت الجملة بوضوح ومطابقة للنطق الأصيل ✓
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-stone-100 border border-stone-200 text-[11px] text-stone-500 flex items-center justify-center gap-2">
+                    <Info className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                    <span>تنبيه تدريبي: التقييم الآلي يعتمد على مطابقة النصوص المستخرجة ولا يمثل تحليلاً صوتياً معملياً لمخارج الحروف.</span>
+                  </div>
+                )}
 
                 {/* Error message */}
                 {micError && (

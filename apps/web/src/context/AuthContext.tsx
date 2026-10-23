@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { authApi } from '../api/auth';
 import { User } from '../types';
+import { clearPrivateOfflineData } from '../utils/offlineStorage';
 
 interface AuthContextType {
   user: User | null;
@@ -53,6 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Ignore network errors on logout
     } finally {
       localStorage.removeItem('spanish_tracker_token');
+      clearPrivateOfflineData();
       setUser(null);
     }
   };

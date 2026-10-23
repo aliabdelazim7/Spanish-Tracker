@@ -91,6 +91,12 @@ export const PlacementResultsPage: React.FC = () => {
             {attempt.summary_report_ar}
           </p>
 
+          {(attempt as any).academic_disclaimer_ar && (
+            <p className="text-xs text-emerald-200/90 max-w-lg mx-auto pt-1 italic border-t border-emerald-600/40">
+              {(attempt as any).academic_disclaimer_ar}
+            </p>
+          )}
+
           <div className="pt-2 flex items-center justify-center gap-4 text-xs text-emerald-200">
             <span>الدرجة الكلية: {attempt.total_score}%</span>
             <span>•</span>
@@ -108,10 +114,13 @@ export const PlacementResultsPage: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {[
               { key: 'vocabulary', label: 'المفردات والثروة اللغوية', color: 'bg-emerald-500' },
-              { key: 'grammar', label: 'القواعد وتصريف الأفعال', color: 'bg-teal-500' },
+              { key: 'grammar', label: 'القواعد والتراكيب', color: 'bg-teal-500' },
+              { key: 'verbs', label: 'تصريف الأفعال', color: 'bg-amber-500' },
               { key: 'reading', label: 'الاستيعاب وفهم المقروء', color: 'bg-blue-500' },
+              { key: 'listening', label: 'الاستماع والتمييز الصوتي', color: 'bg-indigo-500' },
             ].map((sk) => {
               const data = breakdown[sk.key] || { percentage: 0, correct: 0, count: 0 };
+              if (!breakdown[sk.key]) return null;
               return (
                 <div key={sk.key} className="p-4 rounded-2xl bg-stone-50 border border-stone-200/60 space-y-3">
                   <div className="flex items-center justify-between text-xs font-bold text-stone-600">

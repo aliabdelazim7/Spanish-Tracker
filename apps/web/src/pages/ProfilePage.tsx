@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authApi } from '../api/auth';
 import { Navbar } from '../components/Navbar';
@@ -12,7 +13,9 @@ import {
   Save,
   Globe,
   Clock,
-  Sparkles
+  Sparkles,
+  BellRing,
+  ArrowRight
 } from 'lucide-react';
 
 export const ProfilePage: React.FC = () => {
@@ -83,6 +86,27 @@ export const ProfilePage: React.FC = () => {
                 </span>
               </div>
             </div>
+
+            {/* Quick Link to Notifications Settings */}
+            <Link
+              to="/settings/notifications"
+              className="flex items-center justify-between p-4 rounded-2xl bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200 transition-all text-right group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#1B4D3E] text-amber-300 flex items-center justify-center shrink-0 shadow-xs">
+                  <BellRing className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-stone-900 group-hover:text-[#1B4D3E] transition-colors">
+                    إعدادات الإشعارات والتذكير الذكي (Web Push)
+                  </h3>
+                  <p className="text-xs text-stone-600">
+                    اضبط توقيت تذكيرك اليومي، مراجعة المفردات، وسلسلة الأيام.
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="w-4 h-4 text-[#1B4D3E] rotate-180 group-hover:translate-x-1 transition-transform" />
+            </Link>
 
             {saveSuccess && (
               <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center gap-2">
