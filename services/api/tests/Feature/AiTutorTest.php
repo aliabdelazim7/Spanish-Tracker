@@ -229,4 +229,38 @@ class AiTutorTest extends TestCase
         $response->assertStatus(422)
             ->assertJsonValidationErrors(['concept']);
     }
+
+    /** Test 9: Conversational AI Roleplay Scenarios and Real-Time Turn Evaluation */
+    public function test_tutor_provides_roleplay_scenarios_and_evaluates_conversational_reply(): void
+    {
+        // 1. Fetch scenarios
+        $res = $this->actingAs($this->user)->getJson('/api/v1/tutor/roleplays');
+        $res->assertStatus(200)
+            ->assertJsonStructure(['scenarios' => [
+                '*' => ['id', 'title_es', 'title_ar', 'character_name', 'total_turns', 'turns']
+            ]]);
+
+        $scenarios = $res->json('scenarios');
+        $this->assertNotEmpty($scenarios);
+        $restaurantScenario = collect($scenarios)->firstWhere('id', 'restaurant_madrid');
+        $this->assertNotNull($restaurantScenario);
+
+        // 2. Reply to first turn
+        $replyRes = $this->actingAs($this->user)->postJson('/api/v1/tutor/roleplays/reply', [
+            'scenario_id' => 'restaurant_madrid',
+            'turn_index' => 1,
+            'user_input' => 'Buenas tardes, una mesa para dos personas por favor',
+            'lang' => 'ar',
+        ]);
+
+        $replyRes->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('is_passed', true)
+            ->assertJsonPath('turn_index', 1)
+            ->assertJsonStructure([
+                'score', 'feedback_ar', 'suggested_options', 'next_turn_index'
+            ]);
+
+        $this->assertGreaterThanOrEqual(60, $replyRes->json('score'));
+    }
 }

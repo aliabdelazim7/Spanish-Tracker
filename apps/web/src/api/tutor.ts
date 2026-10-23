@@ -87,4 +87,46 @@ export const tutorApi = {
       method: 'POST',
       body: JSON.stringify({ question, user_answer: userAnswer, correct_answer: correctAnswer, lang }),
     }),
+
+  getRoleplays: (level?: string) =>
+    apiClient<{
+      scenarios: {
+        id: string;
+        title_es: string;
+        title_ar: string;
+        description_ar: string;
+        emoji: string;
+        location: string;
+        character_name: string;
+        cefr_level: string;
+        total_turns: number;
+        xp_reward: number;
+        turns: {
+          turn_index: number;
+          character_text_es: string;
+          character_text_ar: string;
+          prompt_ar: string;
+          suggested_options: string[];
+          keywords: string[];
+          hint_ar: string;
+        }[];
+      }[];
+    }>(`/tutor/roleplays${level ? `?level=${encodeURIComponent(level)}` : ''}`),
+
+  replyRoleplay: (data: { scenario_id: string; turn_index: number; user_input: string; lang?: string }) =>
+    apiClient<{
+      success: boolean;
+      is_passed: boolean;
+      score: number;
+      turn_index: number;
+      is_last_turn: boolean;
+      xp_awarded: number;
+      feedback_ar: string;
+      suggested_options: string[];
+      next_turn_index: number | null;
+      scenario_completed: boolean;
+    }>('/tutor/roleplays/reply', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };

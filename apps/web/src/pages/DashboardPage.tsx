@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom';
 import { dashboardApi, DashboardData } from '../api/dashboard';
 import { Navbar } from '../components/Navbar';
 import { Sidebar } from '../components/Sidebar';
+import { AudioSpeakerButton } from '../components/AudioSpeakerButton';
 import { useTranslation } from 'react-i18next';
+import confetti from 'canvas-confetti';
 import {
   Compass,
   Flame,
@@ -25,7 +27,14 @@ import {
   CheckCircle2,
   Lock,
   Layers,
-  GraduationCap
+  GraduationCap,
+  Zap,
+  Share2,
+  Copy,
+  Check,
+  X,
+  MessageCircle,
+  Trophy
 } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
@@ -35,6 +44,16 @@ export const DashboardPage: React.FC = () => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Daily 3-Minute Quick Sprint State
+  const [isSprintModalOpen, setIsSprintModalOpen] = useState(false);
+  const [isSprintLoading, setIsSprintLoading] = useState(false);
+  const [sprintData, setSprintData] = useState<any | null>(null);
+  const [sprintQuestionIndex, setSprintQuestionIndex] = useState(0);
+  const [selectedSprintAnswers, setSelectedSprintAnswers] = useState<{ [qId: number]: string }>({});
+  const [isSubmittingSprint, setIsSubmittingSprint] = useState(false);
+  const [sprintResult, setSprintResult] = useState<any | null>(null);
+  const [copiedCaption, setCopiedCaption] = useState(false);
 
   const fetchDashboard = async () => {
     setIsLoading(true);
@@ -47,6 +66,78 @@ export const DashboardPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleOpenSprint = async () => {
+    setIsSprintModalOpen(true);
+    setIsSprintLoading(true);
+    setSprintResult(null);
+    setSelectedSprintAnswers({});
+    setSprintQuestionIndex(0);
+    setCopiedCaption(false);
+
+    try {
+      const sprint = await dashboardApi.getDailySprint();
+      setSprintData(sprint);
+    } catch (err: any) {
+      alert(err.message || 'تعذر تحميل أسئلة التحدي الصباحي');
+      setIsSprintModalOpen(false);
+    } finally {
+      setIsSprintLoading(false);
+    }
+  };
+
+  const handleSelectSprintOption = (questionId: number, option: string) => {
+    setSelectedSprintAnswers((prev) => ({
+      ...prev,
+      [questionId]: option,
+    }));
+  };
+
+  const handleNextSprintQuestion = () => {
+    if (!sprintData) return;
+    if (sprintQuestionIndex < sprintData.questions.length - 1) {
+      setSprintQuestionIndex((prev) => prev + 1);
+    }
+  };
+
+  const handlePrevSprintQuestion = () => {
+    if (sprintQuestionIndex > 0) {
+      setSprintQuestionIndex((prev) => prev - 1);
+    }
+  };
+
+  const handleSubmitSprint = async () => {
+    if (!sprintData) return;
+
+    const answersPayload = sprintData.questions.map((q: any) => ({
+      question_id: q.id,
+      selected_option: selectedSprintAnswers[q.id] || '',
+    }));
+
+    setIsSubmittingSprint(true);
+    try {
+      const result = await dashboardApi.submitDailySprint(answersPayload);
+      setSprintResult(result);
+      confetti({ particleCount: 75, spread: 80, origin: { y: 0.5 } });
+      // Refresh dashboard in background to reflect updated XP and streak
+      dashboardApi.getDashboard().then((res) => setData(res)).catch(() => {});
+    } catch (err: any) {
+      alert(err.message || 'تعذر تسليم إجابات التحدي اليومي');
+    } finally {
+      setIsSubmittingSprint(false);
+    }
+  };
+
+  const handleCopyShareCaption = (caption: string) => {
+    navigator.clipboard.writeText(caption);
+    setCopiedCaption(true);
+    setTimeout(() => setCopiedCaption(false), 2500);
+  };
+
+  const handleShareWhatsApp = (caption: string) => {
+    const url = `https://wa.me/?text=${encodeURIComponent(caption)}`;
+    window.open(url, '_blank');
   };
 
   useEffect(() => {
@@ -145,6 +236,38 @@ export const DashboardPage: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Daily 3-Minute Quick Sprint Banner Widget */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-800 via-teal-800 to-[#1B4D3E] p-6 text-white shadow-sm border border-emerald-700/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="space-y-1.5 text-start max-w-xl z-10">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-stone-900 font-black text-[11px] flex items-center gap-1 shadow-2xs">
+                  <Zap className="w-3.5 h-3.5 fill-stone-900" />
+                  {isEn ? 'Daily 3-Min Sprint' : 'تحدي الـ 3 دقائق اليومي'}
+                </span>
+                <span className="text-xs text-emerald-200 font-medium">
+                  {isEn ? '+25 XP • Keep your streak alive' : '+25 XP • ثبّت سلسلتك اليوم'}
+                </span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-white">
+                {isEn ? 'Quick Morning Sprint: 5 Rapid Questions' : 'إنعاش الصباح السريع: 5 أسئلة بصرية وسريعة'}
+              </h2>
+              <p className="text-xs sm:text-sm text-emerald-100/90 leading-relaxed font-normal">
+                {isEn
+                  ? 'Quick 3-minute quiz calibrated to your level. Finish it to earn an instant shareable achievement card for WhatsApp & Instagram!'
+                  : 'اختبار خاطف في 3 دقائق مناسب لمستواك؛ أتممه واحصل فوراً على بطاقة إنجاز ومشاركة مميزة لواتساب وإنستغرام!'}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleOpenSprint}
+              className="z-10 px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-black text-sm shadow-md transition-all flex items-center gap-2 shrink-0 self-stretch sm:self-auto justify-center cursor-pointer"
+            >
+              <Zap className="w-4 h-4 fill-stone-950" />
+              <span>{isEn ? 'Start Daily Sprint' : 'ابدأ التحدي السريع'}</span>
+            </button>
           </div>
 
           {/* Daily Goal & Level Course Progress Grid */}
@@ -536,6 +659,237 @@ export const DashboardPage: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Daily 3-Minute Sprint Modal & Shareable Streak Card */}
+          {isSprintModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+              {isSprintLoading ? (
+                <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center space-y-4 shadow-xl">
+                  <Compass className="w-10 h-10 text-[#1B4D3E] animate-spin mx-auto" />
+                  <p className="text-xs font-bold text-stone-700">
+                    جاري تجهيز أسئلة التحدي الصباحي المخصصة لمستواك...
+                  </p>
+                </div>
+              ) : sprintResult ? (
+                /* VIRAL SHAREABLE STREAK CARD */
+                <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 border border-stone-200 shadow-2xl space-y-5 text-center">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
+                      تم إتمام التحدي بنجاح 🎉
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsSprintModalOpen(false)}
+                      className="text-stone-400 hover:text-stone-600 p-1 rounded-full"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Visual Shareable Card Element */}
+                  <div
+                    id="shareable-streak-card"
+                    className="rounded-3xl bg-gradient-to-br from-stone-900 via-[#0d2a21] to-stone-900 p-6 text-white text-right space-y-4 shadow-lg border border-emerald-500/30"
+                  >
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+                        <span className="text-xs font-black tracking-wider text-amber-400">RUTA ESPAÑOL</span>
+                      </div>
+                      <span className="text-[11px] text-stone-300 font-mono">
+                        {sprintResult.shareable_card.date_formatted}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 rounded-2xl bg-orange-500/20 border border-orange-500/40 flex items-center justify-center shrink-0">
+                        <Flame className="w-8 h-8 text-orange-400 fill-orange-400 animate-bounce" />
+                      </div>
+                      <div className="space-y-0.5 text-right">
+                        <div className="text-2xl font-black text-white">
+                          سلسلة {sprintResult.shareable_card.streak_days} أيام متتالية! 🔥
+                        </div>
+                        <div className="text-xs text-amber-300 font-bold">
+                          {sprintResult.shareable_card.learner_name} • {sprintResult.shareable_card.badge_title}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Stats Grid inside Card */}
+                    <div className="grid grid-cols-2 gap-2 pt-2">
+                      <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-center">
+                        <div className="text-[10px] text-stone-400">دقة الإجابات</div>
+                        <div className="text-base font-black text-emerald-400">
+                          {sprintResult.shareable_card.accuracy_percent}%
+                        </div>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-center">
+                        <div className="text-[10px] text-stone-400">الأسئلة الصحيحة</div>
+                        <div className="text-base font-black text-amber-400">
+                          {sprintResult.shareable_card.correct_count} / {sprintResult.shareable_card.total_questions}
+                        </div>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-center">
+                        <div className="text-[10px] text-stone-400">مستوى التعلم</div>
+                        <div className="text-base font-black text-white">
+                          {sprintResult.shareable_card.cefr_level}
+                        </div>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-center">
+                        <div className="text-[10px] text-stone-400">النقاط المكتسبة</div>
+                        <div className="text-base font-black text-emerald-400">
+                          +{sprintResult.xp_awarded} XP
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-stone-300 text-center pt-2 italic border-t border-white/10 font-medium">
+                      "¡Paso a paso se llega lejos! • خطوة بخطوة تبلغ طلاقة الإسبانية"
+                    </div>
+                  </div>
+
+                  {/* Sharing Action Buttons */}
+                  <div className="space-y-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleShareWhatsApp(sprintResult.shareable_card.share_caption)}
+                      className="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>مشاركة الإنجاز عبر واتساب (WhatsApp)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyShareCaption(sprintResult.shareable_card.share_caption)}
+                      className="w-full py-2.5 rounded-2xl border border-stone-300 hover:bg-stone-50 text-stone-700 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      {copiedCaption ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-stone-500" />}
+                      <span>{copiedCaption ? 'تم نسخ نص الإنجاز بنجاح ✓' : 'نسخ نص بطاقة الإنجاز'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsSprintModalOpen(false)}
+                      className="w-full py-2 text-stone-400 hover:text-stone-600 text-xs font-semibold"
+                    >
+                      إغلاق والعودة للوحة التحكم
+                    </button>
+                  </div>
+                </div>
+              ) : sprintData && sprintData.questions && sprintData.questions.length > 0 ? (
+                /* SPRINT QUESTIONS FLOW */
+                <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 border border-stone-200 shadow-2xl space-y-6 text-start">
+                  {/* Header & Progress */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                        <span className="text-xs font-black text-stone-900">
+                          السؤال {sprintQuestionIndex + 1} من {sprintData.questions.length}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsSprintModalOpen(false)}
+                        className="text-stone-400 hover:text-stone-600 p-1 rounded-full"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="w-full bg-stone-100 h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-[#1B4D3E] h-full rounded-full transition-all duration-300"
+                        style={{
+                          width: `${((sprintQuestionIndex + 1) / sprintData.questions.length) * 100}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Active Question Box */}
+                  {(() => {
+                    const q = sprintData.questions[sprintQuestionIndex];
+                    const selected = selectedSprintAnswers[q.id];
+
+                    return (
+                      <div className="space-y-5">
+                        <div className="p-5 rounded-2xl bg-stone-50 border border-stone-200/80 text-center space-y-2">
+                          <span className="text-[11px] font-bold text-stone-400">{q.prompt_ar}</span>
+                          <div className="flex items-center justify-center gap-3">
+                            <span className="text-2xl font-black text-stone-900 bidi-isolate">
+                              {q.spanish_word}
+                            </span>
+                            <AudioSpeakerButton text={q.audio_text || q.spanish_word} size="sm" />
+                          </div>
+                          {q.example_sentence && (
+                            <p className="text-xs text-stone-500 italic bidi-isolate">
+                              "{q.example_sentence}"
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Options Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {q.options.map((opt: string, idx: number) => {
+                            const isSelected = selected === opt;
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => handleSelectSprintOption(q.id, opt)}
+                                className={`p-4 rounded-2xl border-2 text-center text-sm font-bold transition-all cursor-pointer ${
+                                  isSelected
+                                    ? 'border-[#1B4D3E] bg-emerald-50 text-[#1B4D3E] shadow-2xs'
+                                    : 'border-stone-200 bg-white hover:border-stone-300 text-stone-800'
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Navigation / Submit Buttons */}
+                        <div className="flex items-center justify-between pt-2">
+                          <button
+                            type="button"
+                            onClick={handlePrevSprintQuestion}
+                            disabled={sprintQuestionIndex === 0}
+                            className="px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 disabled:opacity-30 text-xs font-bold"
+                          >
+                            السابق
+                          </button>
+
+                          {sprintQuestionIndex < sprintData.questions.length - 1 ? (
+                            <button
+                              type="button"
+                              onClick={handleNextSprintQuestion}
+                              disabled={!selected}
+                              className="px-6 py-2.5 rounded-xl bg-[#1B4D3E] text-white font-bold text-xs shadow-xs hover:bg-[#153e32] disabled:opacity-50"
+                            >
+                              السؤال التالي
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={handleSubmitSprint}
+                              disabled={!selected || isSubmittingSprint}
+                              className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-black text-xs shadow-xs disabled:opacity-50 flex items-center gap-2"
+                            >
+                              <span>{isSubmittingSprint ? 'جاري التقييم...' : 'تسليم التحدي والاطلاع على النتيجة'}</span>
+                              <Trophy className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : null}
+            </div>
+          )}
         </main>
       </div>
     </div>

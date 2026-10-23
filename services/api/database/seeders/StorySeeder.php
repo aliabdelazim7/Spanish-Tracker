@@ -369,5 +369,147 @@ class StorySeeder extends Seeder
                 'explanation_ar' => 'قال طارق: "Llevo cuatro años trabajando..." (أربع سنوات).',
             ]
         );
+
+        // -------------------------------------------------------------
+        // STORY 6: El Clásico: Pasión en el Santiago Bernabéu (A2)
+        // -------------------------------------------------------------
+        $story6 = Story::updateOrCreate(
+            ['title_es' => 'El Clásico: Pasión en el Santiago Bernabéu'],
+            [
+                'cefr_level' => 'A2',
+                'title_ar' => 'الكلاسيكو: الشغف في السانتياغو برنابيو',
+                'summary_ar' => 'يحضر طارق أول مباراة كلاسيكو له بين ريال مدريد وبرشلونة في مدريد، ويتعلم مصطلحات التعليق الرياضي وهتافات الجماهير بالإسبانية.',
+                'topic' => 'football',
+                'estimated_minutes' => 6,
+                'difficulty' => 'medium',
+                'xp_reward' => 30,
+                'is_published' => true,
+            ]
+        );
+
+        $segments6 = [
+            [
+                'order_index' => 1,
+                'speaker_name' => 'Aficionado',
+                'spanish_text' => '¡Mira qué ambientazo hay en el estadio hoy! El Clásico es el partido más emocionante del planeta.',
+                'arabic_translation' => 'انظر إلى الأجواء الخرافية في الملعب اليوم! الكلاسيكو هو المباراة الأكثر إثارة على هذا الكوكب.',
+                'explanation_ar' => 'ambientazo هي صيغة تكبير لكلمة ambiente وتعني "أجواء حماسية استثنائية".',
+                'vocabulary_highlights' => ['ambientazo', 'estadio', 'emocionante', 'partido'],
+            ],
+            [
+                'order_index' => 2,
+                'speaker_name' => 'Comentarista',
+                'spanish_text' => '¡El delantero regatea al defensa dentro del área, chuta a portería y... qué paradón del guardameta!',
+                'arabic_translation' => 'المهاجم يراوغ المدافع داخل منطقة الجزاء، يسدد بقوة على المرمى ويا له من تصدٍ إعجازي من حارس المرمى!',
+                'explanation_ar' => 'مصطلحات كروية: regatear (يراوغ)، chutar (يسدد)، paradón (تصدٍ رائع للحارس).',
+                'vocabulary_highlights' => ['delantero', 'regatea', 'defensa', 'chuta', 'portería', 'guardameta'],
+            ],
+            [
+                'order_index' => 3,
+                'speaker_name' => 'Tariq',
+                'spanish_text' => '¡Fue una jugada increíble! Me encanta la velocidad y la técnica de los futbolistas de LaLiga.',
+                'arabic_translation' => 'كانت لعبة خرافية! تعجبني سرعة ومهارة لاعبي الدوري الإسباني كثيراً.',
+                'explanation_ar' => 'Jugada تعني لعبة أو هجمة منظمة في كرة القدم.',
+                'vocabulary_highlights' => ['jugada', 'increíble', 'velocidad', 'técnica'],
+            ],
+            [
+                'order_index' => 4,
+                'speaker_name' => 'Aficionado',
+                'spanish_text' => '¡Gooool en el último minuto de descuento! ¡Qué victoria tan merecida para la afición!',
+                'arabic_translation' => 'هدف في الدقيقة الأخيرة من الوقت بدل الضائع! يا له من انتصار مستحق للجماهير الوفية!',
+                'explanation_ar' => 'tiempo de descuento تعني الوقت بدل الضائع، و afición تعني رابطة المشجعين والجمهور.',
+                'vocabulary_highlights' => ['descuento', 'victoria', 'afición'],
+            ],
+        ];
+
+        foreach ($segments6 as $seg) {
+            StorySegment::updateOrCreate(
+                ['story_id' => $story6->id, 'order_index' => $seg['order_index']],
+                $seg
+            );
+        }
+
+        StoryQuestion::updateOrCreate(
+            ['story_id' => $story6->id, 'after_segment_index' => 4],
+            [
+                'question_es' => '¿Qué significa "guardameta" en el contexto del partido?',
+                'question_ar' => 'ماذا تعني كلمة "guardameta" في سياق مباراة كرة القدم؟',
+                'options' => [
+                    'حارس المرمى (portero)',
+                    'المهاجم الرئيسي',
+                    'حكم الساحة',
+                    'المدرب الفني'
+                ],
+                'correct_answer' => 'حارس المرمى (portero)',
+                'explanation_ar' => 'Guardameta هي المرادف الفصيح لكلمة Portero وتعني حارس المرمى.',
+            ]
+        );
+
+        // -------------------------------------------------------------
+        // STORY 7: El Legado Andalusí en la Alhambra (A2)
+        // -------------------------------------------------------------
+        $story7 = Story::updateOrCreate(
+            ['title_es' => 'El Legado Andalusí en la Alhambra'],
+            [
+                'cefr_level' => 'A2',
+                'title_ar' => 'سحر قصر الحمراء والروابط العربية الإسبانية',
+                'summary_ar' => 'جولة في قصر الحمراء بغرناطة واكتشاف الكلمات الإسبانية ذات الأصول العربية مثل Aceite و Azúcar و Ojalá.',
+                'topic' => 'culture',
+                'estimated_minutes' => 6,
+                'difficulty' => 'medium',
+                'xp_reward' => 30,
+                'is_published' => true,
+            ]
+        );
+
+        $segments7 = [
+            [
+                'order_index' => 1,
+                'speaker_name' => 'Guía Carmen',
+                'spanish_text' => 'Bienvenidos a la Alhambra de Granada. ¿Sabían que más de cuatro mil palabras en español provienen del árabe?',
+                'arabic_translation' => 'مرحباً بكم في قصر الحمراء بغرناطة. هل تعلمون أن أكثر من أربعة آلاف كلمة في الإسبانية تنحدر من أصول عربية؟',
+                'explanation_ar' => 'provienen de تعني "تنحدر من أو أصلها من".',
+                'vocabulary_highlights' => ['Alhambra', 'palabras', 'provienen', 'árabe'],
+            ],
+            [
+                'order_index' => 2,
+                'speaker_name' => 'Tariq',
+                'spanish_text' => '¡Sí! Palabras cotidianas como azúcar, aceite, almohada y alcalde tienen raíces claramente árabes.',
+                'arabic_translation' => 'نعم! كلمات يومية مثل azúcar (سكر)، aceite (زيت)، almohada (مخدة)، و alcalde (عمدة/قاضي) لها جذور عربية واضحة.',
+                'explanation_ar' => 'معظم الكلمات الإسبانية التي تبدأ بـ al- أصلها أداة التعريف العربية (الـ).',
+                'vocabulary_highlights' => ['azúcar', 'aceite', 'almohada', 'raíces'],
+            ],
+            [
+                'order_index' => 3,
+                'speaker_name' => 'Guía Carmen',
+                'spanish_text' => 'Incluso la expresión de esperanza "¡Ojalá!" viene de la frase árabe "In sha Allah" (si Dios quiere).',
+                'arabic_translation' => 'حتى تعبير الرجاء والتمني الشهير "!Ojalá" مشتق من العبارة العربية "إن شاء الله".',
+                'explanation_ar' => 'Ojalá يتبعها دائماً صيغة الشك (Subjuntivo) وتفيد التمني القوي.',
+                'vocabulary_highlights' => ['esperanza', 'ojalá', 'expresión'],
+            ],
+        ];
+
+        foreach ($segments7 as $seg) {
+            StorySegment::updateOrCreate(
+                ['story_id' => $story7->id, 'order_index' => $seg['order_index']],
+                $seg
+            );
+        }
+
+        StoryQuestion::updateOrCreate(
+            ['story_id' => $story7->id, 'after_segment_index' => 3],
+            [
+                'question_es' => '¿De qué expresión árabe proviene la palabra española "¡Ojalá!"?',
+                'question_ar' => 'من أي تعبير عربي مشتقة كلمة التمني الإسبانية "¡Ojalá!"؟',
+                'options' => [
+                    'إن شاء الله',
+                    'الحمد لله',
+                    'صباح الخير',
+                    'شكراً جزيلاً'
+                ],
+                'correct_answer' => 'إن شاء الله',
+                'explanation_ar' => 'كلمة Ojalá في الإسبانية مشتقة من العبارة العربية "إن شاء الله" للتعبير عن الرجاء والأمل.',
+            ]
+        );
     }
 }

@@ -4,16 +4,19 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\AiTutorService;
+use App\Services\RoleplayService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AiTutorController extends Controller
 {
     protected AiTutorService $tutorService;
+    protected RoleplayService $roleplayService;
 
-    public function __construct(AiTutorService $tutorService)
+    public function __construct(AiTutorService $tutorService, RoleplayService $roleplayService)
     {
         $this->tutorService = $tutorService;
+        $this->roleplayService = $roleplayService;
     }
 
     public function explain(Request $request): JsonResponse
@@ -151,5 +154,37 @@ class AiTutorController extends Controller
         return response()->json([
             'result' => $result,
         ]);
+    }
+
+    public function roleplays(Request $request): JsonResponse
+    {
+        $level = $request->query('level', $request->user()?->profile?->max_unlocked_level ?? 'A1');
+        $scenarios = $this->roleplayService->getScenarios($level);
+
+        return response()->json([
+            'scenarios' => $scenarios,
+        ]);
+    }
+
+    public function roleplayReply(Request $request): JsonResponse
+    {
+        $request->validate([
+            'scenario_id' => 'required|string',
+            'turn_index' => 'required|integer|min:1',
+            'user_input' => 'required|string|min:1|max:400',
+            'lang' => 'nullable|string|in:ar,en',
+        ]);
+
+        $lang = $request->input('lang', 'ar');
+
+        $result = $this->roleplayService->evaluateTurn(
+            $request->user(),
+            $request->scenario_id,
+            (int) $request->turn_index,
+            $request->user_input,
+            $lang
+        );
+
+        return response()->json($result);
     }
 }

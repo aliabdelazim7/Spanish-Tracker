@@ -193,4 +193,75 @@ class DashboardTest extends TestCase
                 'recent_xp',
             ]);
     }
+
+    public function test_daily_sprint_returns_questions_and_submits_with_shareable_card(): void
+    {
+        $user = User::factory()->create();
+        $user->profile()->create(['current_streak' => 3, 'total_xp' => 120]);
+
+        // Seed 5 items for sprint
+        for ($i = 1; $i <= 5; $i++) {
+            VocabularyItem::create([
+                'spanish_word' => "palabra_{$i}",
+                'arabic_meaning' => "معنى_{$i}",
+                'english_meaning' => "meaning_{$i}",
+                'part_of_speech' => 'noun',
+                'example_sentence_es' => "Esta es una palabra_{$i} de prueba.",
+                'example_sentence_ar' => "هذه كلمة_{$i} للتجربة.",
+                'example_sentence_en' => "This is a test word_{$i}.",
+                'topic' => 'general',
+                'cefr_level' => 'A1',
+                'is_published' => true,
+            ]);
+        }
+
+        // 1. Fetch Sprint
+        $res = $this->actingAs($user)->getJson('/api/v1/dashboard/daily-sprint');
+        $res->assertStatus(200)
+            ->assertJsonStructure([
+                'already_completed_today',
+                'sprint_date',
+                'level',
+                'xp_reward',
+                'questions' => [
+                    '*' => ['id', 'order', 'spanish_word', 'prompt_ar', 'options']
+                ]
+            ]);
+
+        $questions = $res->json('questions');
+        $this->assertCount(5, $questions);
+
+        // 2. Submit Sprint with answers
+        $answers = [];
+        foreach ($questions as $q) {
+            $item = VocabularyItem::find($q['id']);
+            $answers[] = [
+                'question_id' => $q['id'],
+                'selected_option' => $item->arabic_meaning,
+            ];
+        }
+
+        $submitRes = $this->actingAs($user)->postJson('/api/v1/dashboard/daily-sprint/submit', [
+            'answers' => $answers,
+        ]);
+
+        $submitRes->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('passed', true)
+            ->assertJsonPath('accuracy_percent', 100)
+            ->assertJsonStructure([
+                'shareable_card' => [
+                    'learner_name',
+                    'streak_days',
+                    'cefr_level',
+                    'total_xp',
+                    'accuracy_percent',
+                    'date_formatted',
+                    'badge_title',
+                    'share_caption',
+                ]
+            ]);
+
+        $this->assertEquals(25, $submitRes->json('xp_awarded'));
+    }
 }

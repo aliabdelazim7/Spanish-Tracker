@@ -15,12 +15,42 @@ import {
   HelpCircle,
   RefreshCw,
   Info,
-  Check
+  Check,
+  MessageSquare,
+  ArrowRight,
+  ArrowLeft,
+  Award,
+  ChevronRight,
+  User,
+  Bot,
+  Lightbulb
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
+interface RoleplayTurnHistory {
+  character_text_es: string;
+  character_text_ar: string;
+  user_input: string;
+  score: number;
+  feedback_ar: string;
+  is_passed: boolean;
+}
+
 export const SpeakingTutorPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'speak' | 'explain' | 'correct'>('speak');
+  const [activeTab, setActiveTab] = useState<'roleplays' | 'speak' | 'explain' | 'correct'>('roleplays');
+
+  // Roleplay simulator state
+  const [scenarios, setScenarios] = useState<any[]>([]);
+  const [isLoadingScenarios, setIsLoadingScenarios] = useState(false);
+  const [selectedScenario, setSelectedScenario] = useState<any | null>(null);
+  const [currentTurnIndex, setCurrentTurnIndex] = useState(0);
+  const [roleplayInput, setRoleplayInput] = useState('');
+  const [isSubmittingTurn, setIsSubmittingTurn] = useState(false);
+  const [turnFeedback, setTurnFeedback] = useState<any | null>(null);
+  const [conversationHistory, setConversationHistory] = useState<RoleplayTurnHistory[]>([]);
+  const [showHint, setShowHint] = useState(false);
+  const [scenarioCompleted, setScenarioCompleted] = useState(false);
+  const [totalXpEarned, setTotalXpEarned] = useState(0);
 
   // Speaking studio state
   const targetPhrases = [
@@ -48,7 +78,139 @@ export const SpeakingTutorPage: React.FC = () => {
   const [isCorrecting, setIsCorrecting] = useState(false);
   const [correctResult, setCorrectResult] = useState<any | null>(null);
 
-  // Real Speech Recognition API
+  useEffect(() => {
+    loadRoleplayScenarios();
+  }, []);
+
+  const loadRoleplayScenarios = async () => {
+    setIsLoadingScenarios(true);
+    try {
+      const res = await tutorApi.getRoleplays();
+      setScenarios(res.scenarios || []);
+    } catch (err) {
+      console.error('Failed to load roleplay scenarios:', err);
+    } finally {
+      setIsLoadingScenarios(false);
+    }
+  };
+
+  const startScenario = (sc: any) => {
+    setSelectedScenario(sc);
+    setCurrentTurnIndex(0);
+    setRoleplayInput('');
+    setTurnFeedback(null);
+    setConversationHistory([]);
+    setShowHint(false);
+    setScenarioCompleted(false);
+    setTotalXpEarned(0);
+  };
+
+  const handleSelectSuggestedOption = (option: string) => {
+    setRoleplayInput(option);
+  };
+
+  const handleSubmitRoleplayTurn = async () => {
+    if (!roleplayInput.trim() || !selectedScenario) return;
+
+    setIsSubmittingTurn(true);
+    setTurnFeedback(null);
+
+    try {
+      const res = await tutorApi.replyRoleplay({
+        scenario_id: selectedScenario.id,
+        turn_index: currentTurnIndex,
+        user_input: roleplayInput.trim(),
+      });
+
+      const currentTurn = selectedScenario.turns[currentTurnIndex];
+
+      const historyEntry: RoleplayTurnHistory = {
+        character_text_es: currentTurn?.character_text_es || '',
+        character_text_ar: currentTurn?.character_text_ar || '',
+        user_input: roleplayInput.trim(),
+        score: res.score,
+        feedback_ar: res.feedback_ar,
+        is_passed: res.is_passed,
+      };
+
+      setConversationHistory((prev) => [...prev, historyEntry]);
+      setTurnFeedback(res);
+      setTotalXpEarned((prev) => prev + (res.xp_awarded || 0));
+
+      if (res.scenario_completed) {
+        setScenarioCompleted(true);
+        confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
+      } else if (res.next_turn_index !== null) {
+        // Move to next turn after small delay
+        setTimeout(() => {
+          setCurrentTurnIndex(res.next_turn_index!);
+          setRoleplayInput('');
+          setTurnFeedback(null);
+          setShowHint(false);
+        }, 1800);
+      }
+    } catch (err: any) {
+      alert(err.message || 'حدث خطأ أثناء معالجة المحادثة');
+    } finally {
+      setIsSubmittingTurn(false);
+    }
+  };
+
+  // Real Speech Recognition API for roleplay or target phrase
+  const handleToggleRecordRoleplay = () => {
+    setMicError(null);
+
+    if (isRecording) {
+      setIsRecording(false);
+      return;
+    }
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setMicError('متصفحك لا يدعم التعرف الصوتي المباشر. يرجى استخدام متصفح Chrome أو كتابة الجملة.');
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'es-ES';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      setIsRecording(true);
+
+      recognition.onresult = (event: any) => {
+        const text = event.results[0][0].transcript;
+        setRoleplayInput(text);
+        setIsRecording(false);
+      };
+
+      recognition.onerror = (e: any) => {
+        setIsRecording(false);
+        if (e.error === 'not-allowed') {
+          setMicError('تم رفض إذن الميكروفون. يرجى تفعيله من إعدادات المتصفح.');
+        } else if (e.error === 'no-speech') {
+          setMicError('لم نتمكن من سماع صوتك. تحدث بوضوح بالإسبانية.');
+        } else {
+          setMicError(`خطأ في التسجيل (${e.error}).`);
+        }
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognition.start();
+    } catch (err: any) {
+      setIsRecording(false);
+      setMicError(err.message || 'تعذر تشغيل الميكروفون.');
+    }
+  };
+
+  // Real Speech Recognition API for speaking studio
   const handleToggleRecord = () => {
     setMicError(null);
 
@@ -176,14 +338,23 @@ export const SpeakingTutorPage: React.FC = () => {
           </div>
 
           {/* Mode Switcher Tabs */}
-          <div className="flex items-center gap-2 bg-stone-100 p-1 rounded-2xl w-fit">
+          <div className="flex flex-wrap items-center gap-2 bg-stone-100 p-1 rounded-2xl w-fit">
+            <button
+              onClick={() => setActiveTab('roleplays')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'roleplays' ? 'bg-white text-[#1B4D3E] shadow-2xs' : 'text-stone-600'
+              }`}
+            >
+              <span>🎭 محاكي المواقف الحية</span>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full font-black">جديد</span>
+            </button>
             <button
               onClick={() => setActiveTab('speak')}
               className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                 activeTab === 'speak' ? 'bg-white text-[#1B4D3E] shadow-2xs' : 'text-stone-600'
               }`}
             >
-              استوديو التحدث الصوتي
+              استوديو التحدث ومخارج الحروف
             </button>
             <button
               onClick={() => setActiveTab('explain')}
@@ -202,6 +373,383 @@ export const SpeakingTutorPage: React.FC = () => {
               تصحيح الجمل
             </button>
           </div>
+
+          {/* TAB 0: ROLEPLAY SCENARIOS */}
+          {activeTab === 'roleplays' && (
+            <div className="space-y-6">
+              {!selectedScenario ? (
+                /* Scenario Selection Grid */
+                <div className="space-y-4">
+                  <div className="bg-white rounded-3xl p-6 border border-stone-200/80 shadow-xs space-y-2 text-right">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        مواقف حية بالذكاء الاصطناعي
+                      </span>
+                      <span className="text-xs text-stone-500 font-medium">5 مواقف تفاعلية متوفرة</span>
+                    </div>
+                    <h2 className="text-xl font-black text-stone-900">
+                      محاكي المواقف الإسبانية الواقعية
+                    </h2>
+                    <p className="text-xs text-stone-600 leading-relaxed font-normal">
+                      لا تكتفِ بحفظ القواعد مجردة؛ ضع نفسك في مواقف حقيقية في شوارع مدريد وإشبيلية! تحدث مع النادل، موظف المطار، وسائق التاكسي بالصوت أو النص، وتلقَّ توجيهاً فورياً لكل رد تقوله.
+                    </p>
+                  </div>
+
+                  {isLoadingScenarios ? (
+                    <div className="p-12 text-center text-stone-500 font-semibold text-xs">
+                      جاري تحميل السيناريوهات التفاعلية...
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {scenarios.map((sc) => (
+                        <div
+                          key={sc.id}
+                          className="bg-white rounded-3xl p-6 border border-stone-200/80 shadow-xs hover:border-[#1B4D3E] transition-all flex flex-col justify-between space-y-4 text-right"
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-3xl">{sc.emoji}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-stone-100 text-stone-700">
+                                  {sc.cefr_level}
+                                </span>
+                                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                                  +{sc.xp_reward} XP
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <h3 className="font-bold text-base text-stone-900">{sc.title_ar}</h3>
+                              <div className="text-xs font-semibold text-[#1B4D3E] bidi-isolate">{sc.title_es}</div>
+                            </div>
+
+                            <p className="text-xs text-stone-600 leading-relaxed font-normal">
+                              {sc.description_ar}
+                            </p>
+
+                            <div className="flex items-center gap-2 text-[11px] text-stone-500 pt-1">
+                              <span>المتحدث: <strong className="text-stone-800">{sc.character_name}</strong></span>
+                              <span>•</span>
+                              <span>المكان: <strong className="text-stone-800">{sc.location}</strong></span>
+                              <span>•</span>
+                              <span>{sc.total_turns} أدوار</span>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => startScenario(sc)}
+                            className="w-full py-3 rounded-2xl bg-[#1B4D3E] text-white font-bold text-xs shadow-xs hover:bg-[#153e32] flex items-center justify-center gap-1.5 transition-all"
+                          >
+                            <span>ابدأ هذا الموقف الآن</span>
+                            <ArrowLeft className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Active Scenario Conversation View */
+                <div className="space-y-5">
+                  {/* Top Bar Navigation */}
+                  <div className="flex items-center justify-between bg-white rounded-2xl p-4 border border-stone-200 shadow-2xs">
+                    <button
+                      onClick={() => setSelectedScenario(null)}
+                      className="flex items-center gap-1.5 text-xs font-bold text-stone-600 hover:text-stone-900"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                      <span>جميع السيناريوهات</span>
+                    </button>
+
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{selectedScenario.emoji}</span>
+                      <div className="text-right">
+                        <div className="text-xs font-bold text-stone-900">{selectedScenario.title_ar}</div>
+                        <div className="text-[11px] text-stone-500">
+                          {selectedScenario.character_name} ({selectedScenario.location})
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        الدور {scenarioCompleted ? selectedScenario.total_turns : currentTurnIndex + 1} من {selectedScenario.total_turns}
+                      </span>
+                      {totalXpEarned > 0 && (
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>+{totalXpEarned} XP</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Conversation Chat Stream */}
+                  <div className="bg-white rounded-3xl p-6 sm:p-8 border border-stone-200 shadow-xs space-y-6">
+                    {/* Previous Turns History */}
+                    {conversationHistory.map((turn, i) => (
+                      <div key={i} className="space-y-4 pb-4 border-b border-stone-100">
+                        {/* Character dialogue */}
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-900 font-bold flex items-center justify-center shrink-0 text-base">
+                            {selectedScenario.character_name.charAt(0)}
+                          </div>
+                          <div className="flex-1 space-y-1.5 text-right">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-stone-800">
+                                {selectedScenario.character_name}
+                              </span>
+                              <AudioSpeakerButton text={turn.character_text_es} size="sm" />
+                            </div>
+                            <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200/80 text-sm font-semibold text-stone-900 bidi-isolate text-left">
+                              {turn.character_text_es}
+                            </div>
+                            <div className="text-xs text-stone-500 font-normal">
+                              {turn.character_text_ar}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* User response */}
+                        <div className="flex items-start gap-3 flex-row-reverse">
+                          <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white font-bold flex items-center justify-center shrink-0 text-sm">
+                            أنت
+                          </div>
+                          <div className="flex-1 space-y-1.5 text-left">
+                            <div className="flex items-center justify-between flex-row-reverse">
+                              <span className="text-xs font-bold text-stone-800">إجابتك</span>
+                              <span
+                                className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                                  turn.is_passed
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                دقة الرد: {turn.score}% {turn.is_passed ? '✓' : '✗'}
+                              </span>
+                            </div>
+                            <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-sm font-semibold text-emerald-950 bidi-isolate">
+                              {turn.user_input}
+                            </div>
+                            <div className="text-xs text-stone-600 text-right font-medium">
+                              {turn.feedback_ar}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Current Turn Active Prompts */}
+                    {!scenarioCompleted && selectedScenario.turns[currentTurnIndex] && (
+                      <div className="space-y-5 pt-2">
+                        {/* Character says */}
+                        <div className="flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white font-bold flex items-center justify-center shrink-0 text-base shadow-xs">
+                            {selectedScenario.character_name.charAt(0)}
+                          </div>
+                          <div className="flex-1 space-y-2 text-right">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-stone-800">
+                                {selectedScenario.character_name} يوجه لك الحديث:
+                              </span>
+                              <AudioSpeakerButton
+                                text={selectedScenario.turns[currentTurnIndex].character_text_es}
+                                size="sm"
+                              />
+                            </div>
+                            <div className="p-4 rounded-2xl bg-stone-100/90 border border-stone-200 text-base font-bold text-stone-900 bidi-isolate text-left">
+                              {selectedScenario.turns[currentTurnIndex].character_text_es}
+                            </div>
+                            <div className="text-xs text-stone-500">
+                              {selectedScenario.turns[currentTurnIndex].character_text_ar}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Task guidance for learner */}
+                        <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-right space-y-1">
+                          <div className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                            <Lightbulb className="w-4 h-4 text-amber-600" />
+                            <span>المطلوب منك في هذا الدور:</span>
+                          </div>
+                          <p className="text-xs text-stone-700 font-medium">
+                            {selectedScenario.turns[currentTurnIndex].prompt_ar}
+                          </p>
+                        </div>
+
+                        {/* Suggested Options Chips */}
+                        {selectedScenario.turns[currentTurnIndex].suggested_options && (
+                          <div className="space-y-1.5 text-right">
+                            <div className="text-[11px] font-bold text-stone-500">
+                              صيغ مقترحة يمكنك استخدامها أو الاستلهام منها:
+                            </div>
+                            <div className="flex flex-wrap gap-2 justify-end">
+                              {selectedScenario.turns[currentTurnIndex].suggested_options.map(
+                                (opt: string, idx: number) => (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => handleSelectSuggestedOption(opt)}
+                                    className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-emerald-50 text-stone-700 hover:text-emerald-900 border border-stone-200/80 hover:border-emerald-300 text-xs font-medium bidi-isolate transition-all"
+                                  >
+                                    "{opt}"
+                                  </button>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* User Input & Audio Recorder */}
+                        <div className="space-y-3 pt-2">
+                          <div className="relative">
+                            <textarea
+                              rows={3}
+                              dir="ltr"
+                              value={roleplayInput}
+                              onChange={(e) => setRoleplayInput(e.target.value)}
+                              placeholder="Escribe tu respuesta en español..."
+                              className="w-full p-4 rounded-2xl border-2 border-stone-200 focus:border-[#1B4D3E] outline-none text-base font-semibold text-stone-900"
+                            />
+                            {isRecording && (
+                              <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-bold animate-pulse">
+                                <span className="w-2 h-2 rounded-full bg-red-600"></span>
+                                <span>جاري الاستماع...</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {micError && (
+                            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-medium flex items-center gap-2">
+                              <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                              <span>{micError}</span>
+                            </div>
+                          )}
+
+                          {/* Action Buttons Row */}
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={handleToggleRecordRoleplay}
+                                className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-all ${
+                                  isRecording
+                                    ? 'bg-red-600 text-white animate-pulse'
+                                    : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+                                }`}
+                              >
+                                {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4 text-emerald-700" />}
+                                <span>{isRecording ? 'إيقاف التسجيل' : 'تحدث بالمايك (إسباني)'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setShowHint(!showHint)}
+                                className="px-3.5 py-2.5 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 font-bold text-xs flex items-center gap-1.5 transition-all"
+                              >
+                                <HelpCircle className="w-4 h-4 text-amber-500" />
+                                <span>{showHint ? 'إخفاء التلميح' : 'تلميح'}</span>
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={handleSubmitRoleplayTurn}
+                              disabled={isSubmittingTurn || !roleplayInput.trim()}
+                              className="px-6 py-2.5 rounded-xl bg-[#1B4D3E] text-white font-bold text-xs shadow-xs hover:bg-[#153e32] disabled:opacity-50 flex items-center gap-2 transition-all"
+                            >
+                              <span>{isSubmittingTurn ? 'جاري الفحص والرد...' : 'إرسال الرد'}</span>
+                              <Send className="w-3.5 h-3.5 rotate-180" />
+                            </button>
+                          </div>
+
+                          {/* Optional Hint Banner */}
+                          {showHint && (
+                            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs text-right space-y-1">
+                              <div className="font-bold">💡 تلميح للمساعدة:</div>
+                              <div>{selectedScenario.turns[currentTurnIndex].hint_ar}</div>
+                            </div>
+                          )}
+
+                          {/* Temporary Turn Feedback Alert before next turn */}
+                          {turnFeedback && (
+                            <div
+                              className={`p-4 rounded-2xl border text-right space-y-2 ${
+                                turnFeedback.is_passed
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                                  : 'bg-amber-50 border-amber-300 text-amber-950'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-white border border-stone-200">
+                                  درجة الرد: {turnFeedback.score}%
+                                </span>
+                                <span className="font-bold text-xs flex items-center gap-1">
+                                  {turnFeedback.is_passed ? (
+                                    <>
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                      <span>رد ممتاز ومفهوم! الانتقال للدور التالي...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <AlertCircle className="w-4 h-4 text-amber-600" />
+                                      <span>رد يحتاج لمزيد من الدقة</span>
+                                    </>
+                                  )}
+                                </span>
+                              </div>
+                              <p className="text-xs leading-relaxed">{turnFeedback.feedback_ar}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Scenario Completed Celebration Card */}
+                    {scenarioCompleted && (
+                      <div className="p-8 rounded-3xl bg-emerald-50 border-2 border-emerald-300 text-center space-y-5">
+                        <div className="w-16 h-16 rounded-full bg-emerald-600 text-white flex items-center justify-center mx-auto shadow-md">
+                          <Award className="w-8 h-8" />
+                        </div>
+
+                        <div className="space-y-1">
+                          <h3 className="text-2xl font-black text-emerald-950">
+                            ¡Enhorabuena! أتممت الموقف بنجاح!
+                          </h3>
+                          <p className="text-xs text-emerald-800">
+                            أنهيت كافة أدوار الحوار في "{selectedScenario.title_ar}" بنجاح وتجاوزت حاجز التحدث في هذا الموقف.
+                          </p>
+                        </div>
+
+                        <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white border border-emerald-200 shadow-2xs font-black text-emerald-900 text-sm">
+                          <Sparkles className="w-5 h-5 text-amber-500" />
+                          <span>حصلت على +{selectedScenario.xp_reward} XP مكافأة إتمام</span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-center gap-3 pt-3">
+                          <button
+                            type="button"
+                            onClick={() => startScenario(selectedScenario)}
+                            className="px-5 py-2.5 rounded-xl border border-emerald-600 text-emerald-800 font-bold text-xs hover:bg-emerald-100 transition-colors"
+                          >
+                            إعادة هذا الموقف للتدرب مجدداً
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedScenario(null)}
+                            className="px-6 py-2.5 rounded-xl bg-[#1B4D3E] text-white font-bold text-xs shadow-xs hover:bg-[#153e32] transition-colors"
+                          >
+                            اختيار موقف آخر من المواقف الخمسة
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* TAB 1: SPEAKING STUDIO */}
           {activeTab === 'speak' && (

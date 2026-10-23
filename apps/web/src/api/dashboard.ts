@@ -56,4 +56,49 @@ export const dashboardApi = {
     }>('/progress'),
 
   getAchievements: () => apiClient<{ achievements: Achievement[] }>('/achievements'),
+
+  getDailySprint: () =>
+    apiClient<{
+      already_completed_today: boolean;
+      sprint_date: string;
+      level: string;
+      xp_reward: number;
+      questions: {
+        id: number;
+        order: number;
+        type: string;
+        spanish_word: string;
+        audio_text: string;
+        example_sentence?: string;
+        prompt_ar: string;
+        options: string[];
+      }[];
+    }>('/dashboard/daily-sprint'),
+
+  submitDailySprint: (answers: { question_id: number; selected_option: string }[]) =>
+    apiClient<{
+      success: boolean;
+      passed: boolean;
+      correct_count: number;
+      total_questions: number;
+      accuracy_percent: number;
+      xp_awarded: number;
+      shareable_card: {
+        learner_name: string;
+        streak_days: number;
+        longest_streak: number;
+        cefr_level: string;
+        total_xp: number;
+        words_mastered: number;
+        accuracy_percent: number;
+        correct_count: number;
+        total_questions: number;
+        date_formatted: string;
+        badge_title: string;
+        share_caption: string;
+      };
+    }>('/dashboard/daily-sprint/submit', {
+      method: 'POST',
+      body: JSON.stringify({ answers }),
+    }),
 };

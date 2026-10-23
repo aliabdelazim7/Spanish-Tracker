@@ -85,10 +85,14 @@ Route::prefix('v1')->group(function () {
             Route::post('/tutor/speaking-feedback', [AiTutorController::class, 'speakingFeedback']);
             Route::post('/tutor/hint', [AiTutorController::class, 'hint']);
             Route::post('/tutor/evaluate-exercise', [AiTutorController::class, 'evaluateExercise']);
+            Route::get('/tutor/roleplays', [AiTutorController::class, 'roleplays']);
+            Route::post('/tutor/roleplays/reply', [AiTutorController::class, 'roleplayReply']);
         });
 
         // Dashboard & Gamification
         Route::get('/dashboard', [DashboardController::class, 'index']);
+        Route::get('/dashboard/daily-sprint', [DashboardController::class, 'dailySprint']);
+        Route::post('/dashboard/daily-sprint/submit', [DashboardController::class, 'submitDailySprint']);
         Route::get('/progress', [DashboardController::class, 'progress']);
         Route::get('/achievements', [DashboardController::class, 'achievements']);
 

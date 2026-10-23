@@ -12,12 +12,21 @@ use App\Models\LevelExamAttempt;
 use App\Models\PlacementAttempt;
 use App\Models\StoryProgress;
 use App\Models\UserVocabulary;
+use App\Models\VocabularyItem;
 use App\Models\XpTransaction;
+use App\Services\GamificationService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
+    protected GamificationService $gamificationService;
+
+    public function __construct(GamificationService $gamificationService)
+    {
+        $this->gamificationService = $gamificationService;
+    }
     /**
      * Get authentic learner dashboard state backed by real database records.
      */
@@ -193,6 +202,158 @@ class DashboardController extends Controller
 
         return response()->json([
             'achievements' => $result,
+        ]);
+    }
+
+    /**
+     * Generate 5 calibrated rapid questions for the Daily 3-Minute Quick Sprint.
+     */
+    public function dailySprint(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $userLevel = $user->profile?->max_unlocked_level ?? ($user->profile?->estimated_cefr_level ?? 'A1');
+
+        // Check if sprint already completed today
+        $todayDate = Carbon::today()->toDateString();
+        $alreadyCompletedToday = XpTransaction::where('user_id', $user->id)
+            ->where('source_type', 'daily_sprint')
+            ->whereDate('created_at', $todayDate)
+            ->exists();
+
+        // Pull 5 diverse vocabulary items for this sprint
+        $items = VocabularyItem::where('cefr_level', $userLevel)
+            ->where('is_published', true)
+            ->inRandomOrder()
+            ->take(5)
+            ->get();
+
+        if ($items->count() < 5) {
+            $items = VocabularyItem::where('is_published', true)
+                ->inRandomOrder()
+                ->take(5)
+                ->get();
+        }
+
+        $allMeanings = VocabularyItem::where('is_published', true)
+            ->pluck('arabic_meaning')
+            ->unique()
+            ->toArray();
+
+        $questions = [];
+        $order = 1;
+
+        foreach ($items as $item) {
+            // Pick 3 distractors
+            $distractors = array_values(array_diff($allMeanings, [$item->arabic_meaning]));
+            shuffle($distractors);
+            $selectedDistractors = array_slice($distractors, 0, 3);
+
+            $options = array_merge([$item->arabic_meaning], $selectedDistractors);
+            shuffle($options);
+
+            $questionType = ($item->part_of_speech === 'verb') ? 'verb_speed' : (($order % 2 === 0) ? 'listening' : 'vocab');
+
+            $questions[] = [
+                'id' => $item->id,
+                'order' => $order++,
+                'type' => $questionType,
+                'spanish_word' => $item->spanish_word,
+                'audio_text' => $item->spanish_word,
+                'example_sentence' => $item->example_sentence_es,
+                'prompt_ar' => $questionType === 'listening' 
+                    ? 'استمع للنطق الإسباني واختر المعنى الصحيح:' 
+                    : "ما هو المعنى الصحيح لكلمة \"{$item->spanish_word}\"؟",
+                'options' => $options,
+            ];
+        }
+
+        return response()->json([
+            'already_completed_today' => $alreadyCompletedToday,
+            'sprint_date' => $todayDate,
+            'level' => $userLevel,
+            'xp_reward' => 25,
+            'questions' => $questions,
+        ]);
+    }
+
+    /**
+     * Submit answers for the Daily 3-Minute Quick Sprint and generate shareable accomplishment card.
+     */
+    public function submitDailySprint(Request $request): JsonResponse
+    {
+        $request->validate([
+            'answers' => 'required|array|min:1',
+            'answers.*.question_id' => 'required|integer',
+            'answers.*.selected_option' => 'required|string',
+        ]);
+
+        $user = $request->user();
+        $submittedAnswers = $request->input('answers');
+        $questionIds = collect($submittedAnswers)->pluck('question_id')->toArray();
+
+        $items = VocabularyItem::whereIn('id', $questionIds)->get()->keyBy('id');
+
+        $correctCount = 0;
+        $totalQuestions = count($submittedAnswers);
+
+        foreach ($submittedAnswers as $ans) {
+            $qId = $ans['question_id'];
+            $selected = trim($ans['selected_option']);
+
+            if (isset($items[$qId])) {
+                $correct = trim($items[$qId]->arabic_meaning);
+                if ($selected === $correct) {
+                    $correctCount++;
+                }
+            }
+        }
+
+        $accuracyPercent = $totalQuestions > 0 ? (int) round(($correctCount / $totalQuestions) * 100) : 0;
+        $passed = $accuracyPercent >= 60;
+
+        $todayDate = Carbon::today()->toDateString();
+        $idempotencyKey = (int) Carbon::today()->format('Ymd');
+        $xpAwarded = 0;
+
+        if ($passed) {
+            $transaction = $this->gamificationService->awardXp(
+                $user,
+                25,
+                'daily_sprint',
+                $idempotencyKey,
+                'إكمال تحدي الـ 3 دقائق اليومي'
+            );
+            $xpAwarded = $transaction ? 25 : 0;
+        }
+
+        $profile = $user->profile()->firstOrCreate(['user_id' => $user->id]);
+        $streak = $profile->current_streak;
+        $level = $profile->max_unlocked_level ?? 'A1';
+
+        // Milestone shareable badge payload
+        $shareableCard = [
+            'learner_name' => $user->name,
+            'streak_days' => max(1, $streak),
+            'longest_streak' => max(1, $profile->longest_streak),
+            'cefr_level' => $level,
+            'total_xp' => $profile->total_xp,
+            'words_mastered' => UserVocabulary::where('user_id', $user->id)->count(),
+            'accuracy_percent' => $accuracyPercent,
+            'correct_count' => $correctCount,
+            'total_questions' => $totalQuestions,
+            'date_formatted' => Carbon::now()->format('d M Y'),
+            'badge_title' => $streak >= 7 ? '🔥 بطل الاستمرارية الأسبوعية' : '⚡ نجم التدريب اليومي السريع',
+            'share_caption' => "حققت إنجازاً جديداً في الإسبانية اليوم! 🔥 سلسلة متواصلة لـ {$streak} أيام في منصة Ruta Español. 🇪🇸✨",
+        ];
+
+        return response()->json([
+            'success' => true,
+            'passed' => $passed,
+            'correct_count' => $correctCount,
+            'total_questions' => $totalQuestions,
+            'accuracy_percent' => $accuracyPercent,
+            'xp_awarded' => $xpAwarded,
+            'shareable_card' => $shareableCard,
         ]);
     }
 }
