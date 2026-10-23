@@ -1,0 +1,28 @@
+# Node & Frontend
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# PHP & Laravel
+services/api/vendor/
+services/api/.env
+services/api/storage/*.key
+services/api/storage/logs/*.log
+services/api/storage/framework/cache/*
+services/api/storage/framework/sessions/*
+services/api/storage/framework/views/*
+services/api/storage/framework/testing/*
+services/api/bootstrap/cache/*
+services/api/database/database.sqlite
+services/api/database/database.sqlite-journal
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

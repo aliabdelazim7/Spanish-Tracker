@@ -1,0 +1,61 @@
+{
+  "common": {
+    "appName": "Ruta Español",
+    "appTagline": "Spanish for Arabic & Global Learners",
+    "level": "Level",
+    "streak": "Streak",
+    "days": "days",
+    "xp": "XP",
+    "logout": "Log Out",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "loading": "Loading...",
+    "continue": "Continue",
+    "submit": "Submit",
+    "retry": "Retry",
+    "back": "Back"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "curriculum": "Learning Path",
+    "stories": "Interactive Stories",
+    "review": "Vocabulary Review",
+    "journal": "Spanish Journal",
+    "myMistakes": "My Common Mistakes",
+    "speakingTutor": "Speaking Studio",
+    "progress": "Progress & Badges",
+    "placementTest": "Placement Test",
+    "profile": "Profile Settings"
+  },
+  "journal": {
+    "title": "Spanish Learning Journal",
+    "subtitle": "Write about your actual day and thoughts in Spanish. Our AI writing tutor analyzes your grammar and builds your personalized practice loop.",
+    "newEntry": "New Journal Entry",
+    "writeTitle": "Entry Title (Optional)",
+    "writePlaceholder": "¿Qué hiciste hoy? Write here in Spanish about your day...",
+    "wordCount": "words",
+    "saveDraft": "Save Draft",
+    "analyzeWriting": "Analyze & Correct with AI",
+    "analyzing": "Analyzing grammar and natural phrasing...",
+    "originalText": "Your Original Text",
+    "correctedVersion": "Recommended Natural Version",
+    "fluencyScore": "Fluency Score",
+    "grammarErrors": "Grammar Errors",
+    "styleSuggestions": "Style Suggestions",
+    "practiceWeakRule": "Practice this concept now",
+    "emptyJournal": "No journal entries yet. Start writing your first Spanish entry today!"
+  },
+  "mistakes": {
+    "title": "My Error Profile & Mistakes",
+    "subtitle": "Mistakes are not failures, they are your roadmap to fluency. Here we track recurring difficulties to give you targeted practice.",
+    "totalMistakes": "Recorded Observations",
+    "grammar": "Grammar",
+    "conjugation": "Verb Conjugation",
+    "agreement": "Gender Agreement",
+    "mastery": "Mastery Rate",
+    "practiceNow": "Practice Concept",
+    "noMistakesYet": "Great job! No recurring mistakes recorded yet."
+  }
+}
