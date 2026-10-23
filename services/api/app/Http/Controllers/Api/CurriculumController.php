@@ -37,10 +37,49 @@ class CurriculumController extends Controller
             ->unique()
             ->toArray();
 
+        $profile = $user->profile;
+        $maxUnlockedLevel = $profile?->max_unlocked_level ?? ($profile?->estimated_cefr_level ?? 'A1');
+        $completedLevels = $profile?->completed_levels ?? [];
+
+        $ranks = ['A1' => 1, 'A2' => 2, 'B1' => 3, 'B2' => 4, 'C1' => 5, 'C2' => 6];
+        $userRank = $ranks[$maxUnlockedLevel] ?? 1;
+
+        if ($course && $course->levels) {
+            foreach ($course->levels as $level) {
+                $lvlRank = $ranks[$level->code] ?? 1;
+                $isUnlocked = ($lvlRank <= $userRank) || in_array($level->code, $completedLevels);
+                $isCompleted = in_array($level->code, $completedLevels);
+
+                $totalLessonsInLevel = 0;
+                $completedLessonsInLevel = 0;
+
+                foreach ($level->units as $unit) {
+                    $uLessons = $unit->lessons;
+                    $totalLessonsInLevel += $uLessons->count();
+                    foreach ($uLessons as $lsn) {
+                        if (in_array($lsn->id, $completedLessonIds)) {
+                            $completedLessonsInLevel++;
+                        }
+                    }
+                }
+
+                $level->is_unlocked = $isUnlocked;
+                $level->is_completed = $isCompleted;
+                $level->total_lessons_count = $totalLessonsInLevel;
+                $level->completed_lessons_count = $completedLessonsInLevel;
+                $level->progress_percent = $totalLessonsInLevel > 0 
+                    ? (int) round(($completedLessonsInLevel / $totalLessonsInLevel) * 100)
+                    : ($isCompleted ? 100 : 0);
+                $level->can_take_exam = $isUnlocked;
+            }
+        }
+
         return response()->json([
             'course' => $course,
             'completed_lesson_ids' => $completedLessonIds,
             'user_level' => $user->profile?->estimated_cefr_level ?? 'A1',
+            'max_unlocked_level' => $maxUnlockedLevel,
+            'completed_levels' => $completedLevels,
         ]);
     }
 

@@ -4,18 +4,23 @@ import { UserVocabulary, VocabularyItem } from '../types';
 import { Navbar } from '../components/Navbar';
 import { Sidebar } from '../components/Sidebar';
 import { AudioSpeakerButton } from '../components/AudioSpeakerButton';
-import { playSpanishAudio } from '../utils/speech';
 import {
   Compass,
   CheckCircle2,
   BookmarkPlus,
   BookmarkCheck,
-  Eye
+  Eye,
+  Search,
+  BookOpen,
+  Zap,
+  MessageSquare,
+  Sparkles,
+  Filter
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export const VocabularyReviewPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'review' | 'catalog'>('review');
+  const [activeTab, setActiveTab] = useState<'catalog' | 'review'>('catalog');
 
   // Review states
   const [dueItems, setDueItems] = useState<UserVocabulary[]>([]);
@@ -26,7 +31,9 @@ export const VocabularyReviewPage: React.FC = () => {
   // Catalog states
   const [catalogItems, setCatalogItems] = useState<VocabularyItem[]>([]);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
-  const [vocabLevelFilter, setVocabLevelFilter] = useState<string>('ALL');
+  const [vocabLevelFilter, setVocabLevelFilter] = useState<string>('A1');
+  const [selectedTopic, setSelectedTopic] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   useEffect(() => {
     loadData();
@@ -81,11 +88,54 @@ export const VocabularyReviewPage: React.FC = () => {
     try {
       await vocabularyApi.saveItem(item.id);
       setSavedIds(new Set([...savedIds, item.id]));
-      // Refresh due list
       const dueRes = await vocabularyApi.getDueReviews();
       setDueItems(dueRes.due_items || []);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const topicOptions = [
+    { key: 'ALL', label: 'الكل' },
+    { key: 'core_verbs', label: '⚡ أفعال أساسية' },
+    { key: 'essential_sentences', label: '💬 جمل وتعبيرات يومية' },
+    { key: 'greetings', label: '👋 تحيات ومجاملات' },
+    { key: 'numbers_time', label: '⏰ أرقام ووقت وأيام' },
+    { key: 'family_people', label: '👨‍👩‍👧 عائلة وأشخاص' },
+    { key: 'food_dining', label: '🍽️ طعام ومطعم' },
+    { key: 'city_transport', label: '🏙️ مدينة ومواصلات' },
+    { key: 'house_daily', label: '🏠 المنزل وأشياء يومية' },
+    { key: 'feelings_adjectives', label: '✨ صفات ومشاعر' },
+  ];
+
+  const filteredCatalog = catalogItems.filter((item) => {
+    const matchLevel = vocabLevelFilter === 'ALL' || item.cefr_level === vocabLevelFilter;
+    const matchTopic = selectedTopic === 'ALL' || item.topic === selectedTopic;
+    const matchSearch =
+      !searchQuery.trim() ||
+      item.spanish_word.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.arabic_meaning.includes(searchQuery) ||
+      (item.example_sentence_es && item.example_sentence_es.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    return matchLevel && matchTopic && matchSearch;
+  });
+
+  const getPartOfSpeechBadge = (pos: string) => {
+    switch (pos) {
+      case 'verb':
+        return { label: 'فعل', color: 'bg-amber-100 text-amber-800' };
+      case 'sentence':
+        return { label: 'جملة مهمة', color: 'bg-teal-100 text-teal-800' };
+      case 'expression':
+        return { label: 'تعبير / مجاملة', color: 'bg-blue-100 text-blue-800' };
+      case 'phrase':
+        return { label: 'عبارة', color: 'bg-purple-100 text-purple-800' };
+      case 'adjective':
+        return { label: 'صفة', color: 'bg-rose-100 text-rose-800' };
+      case 'adverb':
+        return { label: 'ظرف', color: 'bg-indigo-100 text-indigo-800' };
+      default:
+        return { label: 'اسم', color: 'bg-stone-100 text-stone-700' };
     }
   };
 
@@ -95,13 +145,13 @@ export const VocabularyReviewPage: React.FC = () => {
         <Navbar />
         <div className="flex-1 flex items-center justify-center gap-3">
           <Compass className="w-10 h-10 text-[#1B4D3E] animate-spin" />
-          <p className="text-sm font-semibold text-stone-600">جاري تحميل نظام التكرار المتباعد...</p>
+          <p className="text-sm font-semibold text-stone-600">جاري تحميل بنك المفردات...</p>
         </div>
       </div>
     );
   }
 
-  const currentItem = dueItems[currentIndex];
+  const currentDue = dueItems[currentIndex];
 
   return (
     <div className="min-h-screen bg-[#FAF8F5] flex flex-col">
@@ -110,143 +160,255 @@ export const VocabularyReviewPage: React.FC = () => {
       <div className="flex-1 flex flex-col md:flex-row">
         <Sidebar />
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-4xl w-full pb-24 md:pb-8">
-          {/* Header & Tabs */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <h1 className="text-3xl font-black text-stone-900">
-                مراجعة المفردات والتكرار المتباعد
-              </h1>
-              <p className="text-xs sm:text-sm text-stone-600">
-                تثبيت الذاكرة الدائمة وفق خوارزمية SM-2 العلمية.
-              </p>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-5xl w-full pb-24 md:pb-8">
+          {/* Header */}
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 font-bold border border-emerald-300">
+                حصيلة لغوية ضخمة ({catalogItems.length} كلمة وجملة معتمدة)
+              </span>
+              <span className="text-xs px-3 py-1 rounded-full bg-amber-100 text-amber-900 font-bold border border-amber-300">
+                نظام التكرار المتباعد (SM-2)
+              </span>
             </div>
 
-            <div className="flex items-center gap-2 bg-stone-100 p-1 rounded-2xl">
-              <button
-                onClick={() => setActiveTab('review')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'review'
-                    ? 'bg-white text-[#1B4D3E] shadow-2xs'
-                    : 'text-stone-600 hover:text-stone-900'
-                }`}
-              >
-                المراجعات المستحقة ({dueItems.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('catalog')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                  activeTab === 'catalog'
-                    ? 'bg-white text-[#1B4D3E] shadow-2xs'
-                    : 'text-stone-600 hover:text-stone-900'
-                }`}
-              >
-                مكتبة الكلمات المقترحة
-              </button>
-            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-stone-900">
+              بنك المفردات والجمل والأفعال الإسبانية
+            </h1>
+            <p className="text-sm text-stone-600 leading-relaxed max-w-2xl">
+              تصفح أكثر من 250+ كلمة وجملة للمستوى مع النطق الصوتي الأصيل، واحفظ أي كلمة إلى قائمة مراجعتك اليومية لترسيخها في الذاكرة الدائمة.
+            </p>
           </div>
 
-          {/* Tab 1: Spaced Repetition Flashcards */}
+          {/* Mode Switch Tabs */}
+          <div className="flex items-center gap-3 border-b border-stone-200 pb-3">
+            <button
+              onClick={() => setActiveTab('catalog')}
+              className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'catalog'
+                  ? 'bg-[#1B4D3E] text-white shadow-sm'
+                  : 'bg-white border border-stone-200 text-stone-600 hover:border-emerald-300'
+              }`}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>مكتبة المفردات الشاملة ({filteredCatalog.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('review')}
+              className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'review'
+                  ? 'bg-[#1B4D3E] text-white shadow-sm'
+                  : 'bg-white border border-stone-200 text-stone-600 hover:border-emerald-300'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>جلسة المراجعة اليومية ({dueItems.length} مستحقة)</span>
+            </button>
+          </div>
+
+          {/* TAB 1: CATALOG BROWSER */}
+          {activeTab === 'catalog' && (
+            <div className="space-y-5">
+              {/* Filter Controls */}
+              <div className="bg-white p-4 rounded-3xl border border-stone-200 space-y-3 shadow-xs">
+                {/* Search Box */}
+                <div className="relative">
+                  <Search className="w-5 h-5 text-stone-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="ابحث عن أي كلمة، فعل، أو جملة بالإسبانية أو العربية..."
+                    className="w-full pr-11 pl-4 py-2.5 rounded-xl border border-stone-200 text-sm focus:outline-none focus:border-[#1B4D3E]"
+                  />
+                </div>
+
+                {/* CEFR Level Selector */}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="text-xs font-bold text-stone-400 ml-2">المستوى:</span>
+                  {['A1', 'A2', 'ALL'].map((lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={() => setVocabLevelFilter(lvl)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                        vocabLevelFilter === lvl
+                          ? 'bg-[#1B4D3E] text-white shadow-xs'
+                          : 'bg-stone-50 text-stone-600 hover:bg-stone-100 border border-stone-200'
+                      }`}
+                    >
+                      {lvl === 'ALL' ? 'كل المستويات' : `مستوى ${lvl}`}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Topics Filter */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none pt-1">
+                  {topicOptions.map((tp) => (
+                    <button
+                      key={tp.key}
+                      type="button"
+                      onClick={() => setSelectedTopic(tp.key)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                        selectedTopic === tp.key
+                          ? 'bg-amber-500 text-white shadow-xs'
+                          : 'bg-stone-50 text-stone-600 hover:bg-stone-100 border border-stone-200'
+                      }`}
+                    >
+                      {tp.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Items Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {filteredCatalog.map((item) => {
+                  const isSaved = savedIds.has(item.id);
+                  const posBadge = getPartOfSpeechBadge(item.part_of_speech);
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-5 rounded-2xl bg-white border border-stone-200 hover:border-emerald-300 shadow-2xs flex items-start justify-between gap-3 transition-all"
+                    >
+                      <div className="space-y-2 text-start flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-black text-lg text-stone-900" dir="ltr">
+                            {item.spanish_word}
+                          </span>
+                          <AudioSpeakerButton text={item.spanish_word} size="sm" />
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${posBadge.color}`}
+                          >
+                            {posBadge.label}
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-stone-100 text-stone-600">
+                            {item.cefr_level}
+                          </span>
+                        </div>
+
+                        <div className="text-sm font-bold text-emerald-800">
+                          {item.arabic_meaning}
+                        </div>
+
+                        {item.phonetic && (
+                          <div className="text-xs text-stone-400">
+                            نطق: <span className="text-stone-600 font-medium">{item.phonetic}</span>
+                          </div>
+                        )}
+
+                        {item.example_sentence_es && (
+                          <div className="p-2.5 rounded-xl bg-stone-50 border border-stone-100 space-y-1">
+                            <div className="text-xs text-stone-800 font-medium flex items-center justify-between gap-2" dir="ltr">
+                              <span>"{item.example_sentence_es}"</span>
+                              <AudioSpeakerButton text={item.example_sentence_es} size="sm" />
+                            </div>
+                            <div className="text-[11px] text-stone-500">
+                              {item.example_sentence_ar}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        disabled={isSaved}
+                        onClick={() => handleSaveToQueue(item)}
+                        className={`p-2.5 rounded-xl transition-all shrink-0 ${
+                          isSaved
+                            ? 'bg-emerald-50 text-emerald-700 cursor-default'
+                            : 'bg-stone-100 hover:bg-[#1B4D3E] hover:text-white text-stone-600'
+                        }`}
+                        title={isSaved ? 'تمت إضافتها لمراجعاتك' : 'إضافة إلى المراجعة اليومية (SM-2)'}
+                      >
+                        {isSaved ? <BookmarkCheck className="w-5 h-5" /> : <BookmarkPlus className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {filteredCatalog.length === 0 && (
+                <div className="p-12 text-center bg-white rounded-3xl border border-stone-200 text-stone-500 space-y-2">
+                  <p className="font-semibold text-base">لا توجد مفردات مطابقة للبحث أو الفلتر المحدد</p>
+                  <p className="text-xs">جرب تغيير كلمات البحث أو اختيار تصنيف آخر.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: SM-2 REVIEW SESSION */}
           {activeTab === 'review' && (
-            <div className="space-y-6">
-              {dueItems.length > 0 && currentItem ? (
+            <div className="space-y-6 max-w-2xl mx-auto">
+              {dueItems.length > 0 && currentDue ? (
                 <div className="space-y-6">
-                  {/* Progress Indicator */}
-                  <div className="flex items-center justify-between text-xs font-bold text-stone-500">
+                  {/* Progress Header */}
+                  <div className="flex items-center justify-between text-xs text-stone-500 font-bold">
                     <span>
-                      البطاقة {currentIndex + 1} من {dueItems.length}
+                      بطاقة {currentIndex + 1} من {dueItems.length}
                     </span>
-                    <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                      مستوى الإتقان: {currentItem.mastery_level}
+                    <span>
+                      {Math.round(((currentIndex + 1) / dueItems.length) * 100)}% مكتمل
                     </span>
                   </div>
 
-                  {/* 3D-like Flashcard */}
+                  {/* Flashcard */}
                   <div
-                    onClick={() => {
-                      if (!isFlipped) {
-                        setIsFlipped(true);
-                        if (currentItem.vocabulary_item?.spanish_word) {
-                          playSpanishAudio(currentItem.vocabulary_item.spanish_word);
-                        }
-                      }
-                    }}
-                    className={`min-h-[280px] sm:min-h-[320px] rounded-3xl p-8 border-2 shadow-lg transition-all flex flex-col items-center justify-center text-center cursor-pointer relative ${
-                      isFlipped
-                        ? 'bg-emerald-50/70 border-emerald-300'
-                        : 'bg-white border-stone-200 hover:border-[#1B4D3E]'
-                    }`}
+                    onClick={() => setIsFlipped(!isFlipped)}
+                    className="min-h-[260px] p-8 rounded-3xl bg-white border-2 border-stone-200 hover:border-emerald-300 shadow-sm cursor-pointer transition-all flex flex-col items-center justify-center text-center space-y-4"
                   >
                     {!isFlipped ? (
-                      /* Front of card (Spanish) */
+                      /* Front: Spanish */
                       <div className="space-y-4">
-                        <span className="text-xs font-bold px-3 py-1 rounded-full bg-stone-100 text-stone-500">
-                          نطق الكلمة بالإسبانية
+                        <span className="text-xs px-3 py-1 bg-amber-100 text-amber-800 rounded-full font-bold">
+                          {currentDue.vocabulary_item?.cefr_level}
                         </span>
-                        <div className="flex items-center justify-center gap-3">
-                          <div className="text-4xl sm:text-5xl font-black text-stone-900 bidi-isolate tracking-wide">
-                            {currentItem.vocabulary_item?.spanish_word}
-                          </div>
-                          {currentItem.vocabulary_item?.spanish_word && (
-                            <AudioSpeakerButton
-                              text={currentItem.vocabulary_item.spanish_word}
-                              size="lg"
-                              showSlowButton={true}
-                            />
-                          )}
+                        <div className="text-3xl sm:text-4xl font-black text-stone-900" dir="ltr">
+                          {currentDue.vocabulary_item?.spanish_word}
                         </div>
-                        {currentItem.vocabulary_item?.phonetic && (
-                          <div className="text-xs sm:text-sm text-stone-400 font-semibold">
-                            النطق التقريبي: {currentItem.vocabulary_item.phonetic}
+                        {currentDue.vocabulary_item?.phonetic && (
+                          <div className="text-xs text-stone-500">
+                            النطق: {currentDue.vocabulary_item.phonetic}
                           </div>
                         )}
-                        <div className="pt-4 flex items-center gap-1.5 text-xs text-stone-400 font-medium">
+                        <div className="pt-4 flex items-center justify-center gap-1.5 text-xs text-stone-400 font-medium">
                           <Eye className="w-4 h-4" />
-                          <span>انقر لكشف المعنى والمثال</span>
+                          <span>انقر لكشف المعنى والمثال العربي</span>
                         </div>
                       </div>
                     ) : (
-                      /* Back of card (Arabic & Examples) */
-                      <div className="space-y-5 animate-fade-in">
+                      /* Back: Arabic Meaning & Example */
+                      <div className="space-y-4 animate-fade-in w-full">
+                        <div className="text-3xl font-black text-[#1B4D3E]">
+                          {currentDue.vocabulary_item?.arabic_meaning}
+                        </div>
                         <div className="flex items-center justify-center gap-2">
-                          <div className="text-3xl font-black text-[#1B4D3E]">
-                            {currentItem.vocabulary_item?.arabic_meaning}
-                          </div>
-                          {currentItem.vocabulary_item?.spanish_word && (
-                            <AudioSpeakerButton
-                              text={currentItem.vocabulary_item.spanish_word}
-                              size="md"
-                            />
-                          )}
+                          <AudioSpeakerButton
+                            text={currentDue.vocabulary_item?.spanish_word || ''}
+                            size="md"
+                          />
                         </div>
 
-                        <div className="space-y-1">
-                          <div className="text-sm font-bold text-stone-800 bidi-isolate flex items-center justify-center gap-2">
-                            <span>"{currentItem.vocabulary_item?.example_sentence_es}"</span>
-                            {currentItem.vocabulary_item?.example_sentence_es && (
-                              <AudioSpeakerButton
-                                text={currentItem.vocabulary_item.example_sentence_es}
-                                size="sm"
-                              />
-                            )}
+                        {currentDue.vocabulary_item?.example_sentence_es && (
+                          <div className="p-3 bg-stone-50 rounded-2xl border border-stone-100 space-y-1 max-w-md mx-auto text-center">
+                            <div className="text-sm font-bold text-stone-800" dir="ltr">
+                              "{currentDue.vocabulary_item.example_sentence_es}"
+                            </div>
+                            <div className="text-xs text-stone-500">
+                              {currentDue.vocabulary_item.example_sentence_ar}
+                            </div>
                           </div>
-                          <div className="text-xs text-stone-500">
-                            {currentItem.vocabulary_item?.example_sentence_ar}
-                          </div>
-                        </div>
-
-                        <div className="text-[11px] text-stone-400">
-                          النوع: {currentItem.vocabulary_item?.part_of_speech}
-                        </div>
+                        )}
                       </div>
                     )}
                   </div>
 
-                  {/* Rating Buttons (SM-2) */}
+                  {/* SM-2 Rating Buttons */}
                   {isFlipped && (
                     <div className="space-y-3 pt-2">
                       <p className="text-xs text-center font-bold text-stone-600">
-                        قيّم سهولة تذكرك لهذه الكلمة (لتحديد موعد المراجعة القادمة):
+                        قيّم سهولة تذكرك للكلمة لتحديد موعد المراجعة القادمة:
                       </p>
 
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -255,7 +417,7 @@ export const VocabularyReviewPage: React.FC = () => {
                           className="p-3 rounded-2xl border-2 border-red-200 bg-red-50 hover:bg-red-100 text-red-900 text-xs font-bold transition-colors text-center space-y-1"
                         >
                           <div>لم أتذكرها</div>
-                          <div className="text-[10px] text-red-600 font-normal">إعادة غداً (1 يوم)</div>
+                          <div className="text-[10px] text-red-600 font-normal">إعادة غداً</div>
                         </button>
 
                         <button
@@ -270,7 +432,7 @@ export const VocabularyReviewPage: React.FC = () => {
                           onClick={() => handleRate(4)}
                           className="p-3 rounded-2xl border-2 border-teal-200 bg-teal-50 hover:bg-teal-100 text-teal-900 text-xs font-bold transition-colors text-center space-y-1"
                         >
-                          <div>جيد بعد تردد</div>
+                          <div>تذكرتها جيداً</div>
                           <div className="text-[10px] text-teal-700 font-normal">بعد 6 أيام</div>
                         </button>
 
@@ -286,7 +448,7 @@ export const VocabularyReviewPage: React.FC = () => {
                   )}
                 </div>
               ) : (
-                /* Empty state: all done! */
+                /* Completed State */
                 <div className="bg-white rounded-3xl p-10 text-center border border-stone-200 shadow-xs space-y-4">
                   <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
                     <CheckCircle2 className="w-8 h-8" />
@@ -295,90 +457,16 @@ export const VocabularyReviewPage: React.FC = () => {
                     أحسنت! لا توجد بطاقات مستحقة للمراجعة حالياً
                   </h3>
                   <p className="text-xs text-stone-500 max-w-md mx-auto leading-relaxed">
-                    لقد أكملت جميع مراجعاتك المجدولة لهذا اليوم. يمكنك إضافة كلمات جديدة من المكتبة أدناه لحفظها.
+                    لقد أكملت جميع مراجعاتك المجدولة لهذا اليوم. يمكنك إضافة كلمات جديدة من المكتبة لحفظها ومراجعتها.
                   </p>
                   <button
                     onClick={() => setActiveTab('catalog')}
                     className="px-6 py-2.5 rounded-xl bg-[#1B4D3E] text-white text-xs font-bold shadow-xs hover:bg-[#153e32]"
                   >
-                    استعراض الكلمات المقترحة
+                    استعراض مكتبة الكلمات
                   </button>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* Tab 2: Catalog Browser */}
-          {activeTab === 'catalog' && (
-            <div className="space-y-4">
-              {/* Filter by CEFR Level */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                {['ALL', 'A1', 'A2', 'B1', 'B2'].map((lvl) => (
-                  <button
-                    key={lvl}
-                    type="button"
-                    onClick={() => setVocabLevelFilter(lvl)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      vocabLevelFilter === lvl
-                        ? 'bg-[#1B4D3E] text-white shadow-2xs'
-                        : 'bg-white border border-stone-200 text-stone-600 hover:border-emerald-300'
-                    }`}
-                  >
-                    {lvl === 'ALL' ? 'كل المفردات' : `مستوى ${lvl}`}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {catalogItems
-                  .filter((item) => vocabLevelFilter === 'ALL' || item.cefr_level === vocabLevelFilter)
-                  .map((item) => {
-                    const isSaved = savedIds.has(item.id);
-
-                    return (
-                  <div
-                    key={item.id}
-                    className="p-5 rounded-2xl bg-white border border-stone-200 hover:border-emerald-300 shadow-2xs flex items-center justify-between transition-all"
-                  >
-                    <div className="space-y-1 text-right">
-                      <div className="flex items-center gap-2">
-                        <span className="font-black text-lg text-stone-900 bidi-isolate">
-                          {item.spanish_word}
-                        </span>
-                        <AudioSpeakerButton text={item.spanish_word} size="sm" />
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-stone-100 text-stone-500">
-                          {item.cefr_level}
-                        </span>
-                      </div>
-                      <div className="text-sm font-semibold text-emerald-800">
-                        {item.arabic_meaning}
-                      </div>
-                      <div className="text-xs text-stone-400 italic bidi-isolate flex items-center gap-1.5">
-                        <span>{item.example_sentence_es}</span>
-                        <AudioSpeakerButton text={item.example_sentence_es} size="sm" />
-                      </div>
-                    </div>
-
-                    <button
-                      disabled={isSaved}
-                      onClick={() => handleSaveToQueue(item)}
-                      className={`p-2.5 rounded-xl transition-all ${
-                        isSaved
-                          ? 'bg-emerald-50 text-emerald-700 cursor-default'
-                          : 'bg-stone-100 hover:bg-[#1B4D3E] hover:text-white text-stone-600'
-                      }`}
-                      title={isSaved ? 'تمت إضافتها لمراجعاتك' : 'إضافة إلى المراجعة اليومية'}
-                    >
-                      {isSaved ? (
-                        <BookmarkCheck className="w-5 h-5" />
-                      ) : (
-                        <BookmarkPlus className="w-5 h-5" />
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
-              </div>
             </div>
           )}
         </main>
@@ -386,3 +474,4 @@ export const VocabularyReviewPage: React.FC = () => {
     </div>
   );
 };
+export default VocabularyReviewPage;

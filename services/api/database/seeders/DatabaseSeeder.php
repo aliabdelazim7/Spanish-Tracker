@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             VocabularySeeder::class,
             StorySeeder::class,
             AchievementSeeder::class,
+            LevelExamQuestionSeeder::class,
         ]);
 
         // 2. Demo User for quick test and development
@@ -39,6 +40,8 @@ class DatabaseSeeder extends Seeder
                 'explanation_dialect' => 'egyptian_arabic',
                 'target_variant' => 'spain',
                 'estimated_cefr_level' => 'A1',
+                'max_unlocked_level' => 'A1',
+                'completed_levels' => [],
                 'onboarding_completed' => true,
                 'total_xp' => 45,
                 'current_streak' => 2,

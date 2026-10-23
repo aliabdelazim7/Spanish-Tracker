@@ -22,6 +22,7 @@ import { ProgressPage } from './pages/ProgressPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { JournalPage } from './pages/JournalPage';
 import { MyMistakesPage } from './pages/MyMistakesPage';
+import { LevelExamPage } from './pages/LevelExamPage';
 import { MobileTabBar } from './components/MobileTabBar';
 
 const queryClient = new QueryClient({
@@ -97,6 +98,15 @@ export const App: React.FC = () => {
               element={
                 <ProtectedRoute>
                   <LessonPlayerPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/levels/:levelCode/exam"
+              element={
+                <ProtectedRoute>
+                  <LevelExamPage />
                 </ProtectedRoute>
               }
             />

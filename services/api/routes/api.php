@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CurriculumController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\JournalController;
+use App\Http\Controllers\Api\LevelExamController;
 use App\Http\Controllers\Api\LessonSessionController;
 use App\Http\Controllers\Api\MyMistakesController;
 use App\Http\Controllers\Api\OnboardingController;
@@ -49,6 +50,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/learning-path', [CurriculumController::class, 'learningPath']);
         Route::get('/units/{unitId}', [CurriculumController::class, 'unit']);
         Route::get('/lessons/{lessonId}', [CurriculumController::class, 'lesson']);
+
+        // Level Graduation Exams & Assessment
+        Route::get('/levels/{levelCode}/exam', [LevelExamController::class, 'getExam']);
+        Route::post('/levels/{levelCode}/exam/submit', [LevelExamController::class, 'submitExam']);
 
         // Lesson Session
         Route::post('/lessons/{lessonId}/start', [LessonSessionController::class, 'start']);

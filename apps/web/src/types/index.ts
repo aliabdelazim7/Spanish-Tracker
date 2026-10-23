@@ -15,6 +15,8 @@ export interface UserProfile {
   explanation_dialect: 'egyptian_arabic' | 'msa';
   target_variant: 'spain' | 'latin_america';
   estimated_cefr_level: string | null;
+  max_unlocked_level?: string;
+  completed_levels?: string[];
   onboarding_completed: boolean;
   total_xp: number;
   current_streak: number;
@@ -41,6 +43,12 @@ export interface CefrLevel {
   description_ar: string;
   order_index: number;
   units?: Unit[];
+  is_unlocked?: boolean;
+  is_completed?: boolean;
+  total_lessons_count?: number;
+  completed_lessons_count?: number;
+  progress_percent?: number;
+  can_take_exam?: boolean;
 }
 
 export interface Unit {
@@ -50,6 +58,7 @@ export interface Unit {
   title_ar: string;
   description_ar: string;
   icon: string | null;
+  skill_category?: string;
   order_index: number;
   lessons?: Lesson[];
   level?: CefrLevel;
@@ -262,4 +271,49 @@ export interface LearningRecommendation {
   action_type: string;
   action_payload: any;
   is_dismissed: boolean;
+}
+
+export interface LevelExamQuestion {
+  id: number;
+  skill_category: string;
+  question_text: string;
+  prompt_ar: string;
+  audio_url: string | null;
+  options: string[];
+  points: number;
+  order_index: number;
+}
+
+export interface LevelExamData {
+  level: {
+    code: string;
+    name: string;
+    name_ar: string;
+  };
+  total_lessons: number;
+  completed_lessons: number;
+  completion_percent: number;
+  already_passed: boolean;
+  questions: LevelExamQuestion[];
+  pass_threshold_percent: number;
+}
+
+export interface LevelExamSubmitResponse {
+  passed: boolean;
+  score_percent: number;
+  current_level: string;
+  next_level: string | null;
+  feedback_ar: string;
+  xp_awarded: number;
+  skill_breakdown: Record<string, { earned: number; total: number }>;
+  detailed_results: Array<{
+    question_id: number;
+    question_text: string;
+    user_answer: string;
+    correct_answer: string;
+    is_correct: boolean;
+    explanation_ar?: string;
+  }>;
+  unlocked_levels: string[];
+  max_unlocked_level: string;
 }

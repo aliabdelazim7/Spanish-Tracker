@@ -163,8 +163,19 @@ class PlacementEngineService
             // Update user profile
             $user = $attempt->user;
             if ($user && $user->profile) {
+                $ranks = ['A1' => 1, 'A2' => 2, 'B1' => 3, 'B2' => 4, 'C1' => 5, 'C2' => 6];
+                $targetRank = $ranks[$level] ?? 1;
+                $completed = [];
+                foreach ($ranks as $lvl => $rnk) {
+                    if ($rnk < $targetRank) {
+                        $completed[] = $lvl;
+                    }
+                }
+
                 $user->profile->update([
                     'estimated_cefr_level' => $level,
+                    'max_unlocked_level' => $level,
+                    'completed_levels' => $completed,
                 ]);
             }
 

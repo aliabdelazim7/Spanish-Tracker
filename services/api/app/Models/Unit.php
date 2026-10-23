@@ -12,6 +12,7 @@ class Unit extends Model
         'title_ar',
         'description_ar',
         'icon',
+        'skill_category',
         'order_index',
         'is_published',
     ];

@@ -14,6 +14,8 @@ class UserProfile extends Model
         'explanation_dialect',
         'target_variant',
         'estimated_cefr_level',
+        'max_unlocked_level',
+        'completed_levels',
         'onboarding_completed',
         'total_xp',
         'current_streak',
@@ -29,6 +31,7 @@ class UserProfile extends Model
         'current_streak' => 'integer',
         'longest_streak' => 'integer',
         'last_activity_date' => 'date',
+        'completed_levels' => 'array',
     ];
 
     public function user()
