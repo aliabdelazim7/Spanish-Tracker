@@ -28,7 +28,11 @@ class AuthTest extends TestCase
             ]);
 
         $this->assertDatabaseHas('users', ['email' => 'ahmed@example.com']);
-        $this->assertDatabaseHas('user_profiles', ['learning_reason' => 'travel']);
+        $this->assertDatabaseHas('user_profiles', [
+            'learning_reason' => 'travel',
+            'max_unlocked_level' => 'A1',
+            'estimated_cefr_level' => 'A1',
+        ]);
     }
 
     public function test_user_can_login_with_valid_credentials(): void

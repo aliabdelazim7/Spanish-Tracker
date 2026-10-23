@@ -20,8 +20,9 @@ export const MobileTabBar: React.FC = () => {
   const isLessonSession = location.pathname.startsWith('/learn/lessons/');
   const isStoryReaderSession = /^\/stories\/\d+/.test(location.pathname);
   const isPlacementTestSession = location.pathname === '/placement-test';
+  const isLevelExamSession = /^\/levels\/[^/]+\/exam/.test(location.pathname);
 
-  if (isLessonSession || isStoryReaderSession || isPlacementTestSession) {
+  if (isLessonSession || isStoryReaderSession || isPlacementTestSession || isLevelExamSession) {
     return null;
   }
 
